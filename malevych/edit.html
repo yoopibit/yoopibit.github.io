@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://telegram.org; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Правки слайда</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #fff); --fg: var(--tg-theme-text-color, #111);
+    --hint: var(--tg-theme-hint-color, #8a8a8e); --link: var(--tg-theme-link-color, #2a7de1);
+    --btn: var(--tg-theme-button-color, #2a7de1); --btn-fg: var(--tg-theme-button-text-color, #fff);
+    --sec: var(--tg-theme-secondary-bg-color, #f2f2f5); --field: var(--tg-theme-section-bg-color, #fff);
+    --bad: var(--tg-theme-destructive-text-color, #d93025); --warn: #c77700;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: var(--tg-theme-bg-color, #1c1c1e); --fg: var(--tg-theme-text-color, #f2f2f2);
+      --hint: var(--tg-theme-hint-color, #98989f); --sec: var(--tg-theme-secondary-bg-color, #000);
+      --field: var(--tg-theme-section-bg-color, #2c2c2e); --warn: #f0a640;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--sec); color: var(--fg);
+    font: 16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    padding: calc(12px + max(env(safe-area-inset-top), var(--tg-safe-area-inset-top, 0px)) + var(--tg-content-safe-area-inset-top, 0px))
+             max(16px, env(safe-area-inset-right), var(--tg-safe-area-inset-right, 0px))
+             calc(24px + max(env(safe-area-inset-bottom), var(--tg-safe-area-inset-bottom, 0px)) + var(--tg-content-safe-area-inset-bottom, 0px))
+             max(16px, env(safe-area-inset-left), var(--tg-safe-area-inset-left, 0px));
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 2px; }
+  .sub { color: var(--hint); font-size: 14px; margin: 0 0 14px; overflow-wrap: anywhere; }
+  .field { background: var(--field); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
+  .field label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--hint); margin: 0 0 4px; }
+  .field textarea, .field input {
+    display: block; width: 100%; margin: 0; padding: 6px 0; border: 0; outline: 0; resize: none;
+    background: transparent; color: var(--fg); font: inherit; font-size: 17px; line-height: 1.35;
+    min-height: 44px; overflow: hidden;
+  }
+  .field:focus-within { box-shadow: 0 0 0 2px var(--btn); }
+  .field.changed label .k::after { content: " · змінено"; color: var(--link); }
+  .field.ro { opacity: .55; }
+  .field.ro:focus-within { box-shadow: none; }
+  .field .err { color: var(--bad); font-size: 13px; margin-top: 4px; }
+  .field .err:empty { display: none; }
+  .meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--hint); margin: 14px 2px 6px; }
+  .meta .over { color: var(--warn); font-weight: 600; }
+  .meta .block { color: var(--bad); font-weight: 600; }
+  #status { min-height: 20px; font-size: 14px; color: var(--hint); margin: 0 2px 10px; }
+  #status.bad { color: var(--bad); }
+  .btn {
+    display: block; width: 100%; min-height: 50px; margin: 0 0 10px; padding: 14px; border: 0; border-radius: 12px;
+    background: var(--btn); color: var(--btn-fg); font: inherit; font-size: 17px; font-weight: 600;
+    text-align: center; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .btn.second { background: var(--field); color: var(--link); }
+  .btn[disabled], .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+  [hidden] { display: none !important; }
+  details { margin: 6px 2px; }
+  summary { color: var(--hint); font-size: 14px; min-height: 32px; cursor: pointer; }
+  pre {
+    background: var(--field); padding: 10px 12px; border-radius: 12px; margin: 6px 0 0; font-size: 13px;
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text;
+  }
+  #toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); max-width: 608px;
+    margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff;
+    text-align: center; font-size: 15px;
+  }
+  .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
+</style>
+</head>
+<body>
+<main id="app">
+  <h1 id="head"></h1>
+  <p class="sub" id="sub"></p>
+  <div id="fields"></div>
+  <div class="meta"><span id="words"></span><span id="chars"></span></div>
+  <div id="status" role="status"></div>
+  <a id="send" class="btn" hidden rel="noopener">Надіслати Малевичу</a>
+  <button id="copy" class="btn second" type="button" hidden>Скопіювати</button>
+  <details id="preview" hidden><summary>Що буде надіслано</summary><pre id="msg"></pre></details>
+</main>
+<div id="toast" hidden></div>
+<script>
+"use strict";
+(function () {
+  const tg = (window.Telegram && window.Telegram.WebApp) || null;
+  const inTg = !!(tg && typeof tg.initData === "string" && tg.initData);
+  const RAW_HASH = location.hash.slice(1);            // read once, before anything can touch it
+  const RO = 1, ONE_LINE = 2;
+  const END = "⟦кінець⟧";
+  const BROKEN = "Посилання пошкоджене — попросіть Малевича надіслати нове";
+  const $ = (id) => document.getElementById(id);
+  // Python str.strip() whitespace (str.isspace), so trimming matches miniapp.parse exactly
+  const WS = "\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
+  const TRIM = new RegExp("^[" + WS + "]+|[" + WS + "]+$", "g");
+  const WORD = /[\p{L}\p{N}]+(?:[-ʼ’'][\p{L}\p{N}]+)*/gu;   // lint.py: [^\W_]+(?:[-ʼ’'][^\W_]+)*
+  const FENCE = /^```/m;                                       // miniapp.FENCE_RE drops such lines
+
+  // -- decoding --------------------------------------------------------------------------------------
+  function b64uToBytes(s) {
+    if (!/^[A-Za-z0-9_-]*$/.test(s)) throw new Error("not base64url");
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  async function inflate(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return await new Response(stream).text();
+  }
+  async function decodeD(d) {
+    if (d[0] === "z") return JSON.parse(await inflate(b64uToBytes(d.slice(1))));
+    if (d[0] === "p") return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(b64uToBytes(d.slice(1))));
+    throw new Error("unknown prefix");
+  }
+  const hex8 = (x) => typeof x === "string" && /^[0-9a-f]{8}$/.test(x);
+  const isInt = (x) => Number.isInteger(x) && x >= 0;
+  function checkPayload(p) {
+    if (!p || typeof p !== "object" || p.v !== 1) return null;
+    if (typeof p.bot !== "string" || !/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(p.bot)) return null;
+    if (!hex8(p.pid) || !hex8(p.fp) || typeof p.sid !== "string" || !/^s\d+$/.test(p.sid)) return null;
+    if (!isInt(p.ver) || !Array.isArray(p.f) || !p.f.length) return null;
+    const seen = new Set();
+    for (const x of p.f) {
+      if (!Array.isArray(x) || x.length < 3 || x.length > 4) return null;
+      const [k, label, text, flags] = x;
+      if (typeof k !== "string" || !/^t\d+$/.test(k) || seen.has(k)) return null;
+      if (typeof label !== "string" || /[⟧\n]/.test(label) || typeof text !== "string") return null;
+      if (flags !== undefined && !isInt(flags)) return null;
+      seen.add(k);
+    }
+    const w = p.words && typeof p.words === "object" ? p.words : {};
+    return {
+      bot: p.bot, pid: p.pid, sid: p.sid, ver: p.ver, fp: p.fp,
+      n: isInt(p.n) ? p.n : Number(p.sid.slice(1)),
+      title: typeof p.title === "string" ? p.title : "",
+      wmax: isInt(w.max) ? w.max : 40, wother: isInt(w.other) ? w.other : 0,
+      max: isInt(p.max) && p.max > 0 ? p.max : 3500,
+      tier: typeof p.tier === "string" ? p.tier : "",
+      f: p.f.map(([key, label, text, flags]) => ({ key, label, text, ro: !!((flags || 0) & RO),
+                                                   one: !!((flags || 0) & ONE_LINE) })),
+    };
+  }
+
+  // -- SHA-1 (synchronous, so the copy/send handlers keep the user gesture) ---------------------------
+  function sha1hex(str) {
+    const src = new TextEncoder().encode(str);
+    const n = ((src.length + 9 + 63) >> 6) << 6;
+    const m = new Uint8Array(n);
+    m.set(src); m[src.length] = 0x80;
+    const dv = new DataView(m.buffer);
+    const bits = src.length * 8;
+    dv.setUint32(n - 8, Math.floor(bits / 4294967296)); dv.setUint32(n - 4, bits >>> 0);
+    const H = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+    const w = new Uint32Array(80);
+    for (let o = 0; o < n; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+      for (let i = 16; i < 80; i++) { const x = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]; w[i] = (x << 1) | (x >>> 31); }
+      let [a, b, c, d, e] = H;
+      for (let i = 0; i < 80; i++) {
+        const f = i < 20 ? (b & c) | (~b & d) : i < 40 ? b ^ c ^ d : i < 60 ? (b & c) | (b & d) | (c & d) : b ^ c ^ d;
+        const k = i < 20 ? 0x5a827999 : i < 40 ? 0x6ed9eba1 : i < 60 ? 0x8f1bbcdc : 0xca62c1d6;
+        const t = (((a << 5) | (a >>> 27)) + f + e + k + w[i]) >>> 0;
+        e = d; d = c; c = ((b << 30) | (b >>> 2)) >>> 0; b = a; a = t;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0;
+      H[3] = (H[3] + d) >>> 0; H[4] = (H[4] + e) >>> 0;
+    }
+    return H.map((x) => x.toString(16).padStart(8, "0")).join("");
+  }
+
+  // -- the §4 message (miniapp.build_message with_hash=True) ----------------------------------------
+  const clean = (v) => v.replace(/\r\n?/g, "\n").replace(/[⟦⟧]/g, "").replace(TRIM, "");
+  const cps = (s) => Array.from(s).length;
+  const countWords = (s) => (s.match(WORD) || []).length;
+  function buildMessage(P, items) {
+    const h = sha1hex(items.map(([k, , v]) => k + "\n" + v + "\n").join("").normalize("NFC")).slice(0, 8);
+    const lines = [`✏️ Правки · ${P.pid} · ${P.sid} · v${P.ver} · ${P.fp} · h${h}`];
+    for (const [k, label, v] of items) lines.push(`⟦${k} ${label}⟧`, v);
+    lines.push(END);
+    return lines.join("\n");
+  }
+  // values: {key: raw value}. → {items, errors: {key: msg}, words, msg, chars, ok, reason}
+  function evaluate(P, values) {
+    const items = [], errors = {};
+    let words = P.wother;
+    for (const x of P.f) {
+      if (x.ro) continue;
+      const v = clean(values[x.key] !== undefined ? values[x.key] : x.text);
+      words += countWords(v);
+      if (!v) errors[x.key] = "Порожньо — щоб видалити текст, напиши в чаті";
+      else if (x.one && /\n/.test(v)) errors[x.key] = "Підпис у графіку має бути в один рядок";
+      else if (FENCE.test(v)) errors[x.key] = "Рядок не може починатися з ```";
+      if (v !== x.text) items.push([x.key, x.label, v]);
+    }
+    const msg = items.length ? buildMessage(P, items) : "";
+    const chars = cps(msg);
+    let reason = "";
+    if (Object.keys(errors).length) reason = "Виправте поля, позначені червоним";
+    else if (!items.length) reason = "Змініть текст, щоб надіслати";
+    else if (chars > P.max) reason = `Задовге повідомлення: ${chars} із ${P.max} символів — скоротіть текст`;
+    return { items, errors, words, msg, chars, ok: !reason, reason };
+  }
+
+  // -- UI ----------------------------------------------------------------------------------------------
+  function fatal(text) {
+    const app = $("app");
+    app.textContent = "";
+    const d = document.createElement("div");
+    d.className = "fatal"; d.id = "fatal"; d.textContent = text;
+    app.appendChild(d);
+    if (tg) { try { tg.ready(); if (tg.MainButton) tg.MainButton.hide(); } catch (e) { /* not in Telegram */ } }
+  }
+  let toastTimer = 0;
+  function toast(t, ms) {
+    const e = $("toast");
+    e.textContent = t; e.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (e.hidden = true), ms || 2500);
+  }
+  function grow(el) {
+    if (el.tagName !== "TEXTAREA") return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+  // a DOM gesture is needed: called synchronously from a click handler
+  function copy(text) {
+    function legacy() {
+      const t = document.createElement("textarea");
+      t.value = text; t.setAttribute("readonly", "");
+      t.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+      document.body.appendChild(t);
+      t.focus(); t.select(); t.setSelectionRange(0, t.value.length);
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      t.remove();
+      return ok;
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).then(() => true, () => legacy());
+      }
+    } catch (e) { /* fall through */ }
+    return Promise.resolve(legacy());
+  }
+
+  async function main() {
+    let P = null;
+    try {
+      const d = new URLSearchParams(RAW_HASH).get("d");
+      if (d) P = checkPayload(await decodeD(d));
+    } catch (e) { P = null; }
+    if (!P) return fatal(BROKEN);
+    if (!P.f.some((x) => !x.ro)) return fatal("На цьому слайді немає тексту, який можна правити з форми — напиши в чаті");
+
+    const tier = inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web";
+    const MB = inTg && tier === "A" ? tg.MainButton : null;
+    document.title = `Слайд ${P.n} · правки`;
+    $("head").textContent = `Слайд ${P.n} · v${P.ver}` + (P.title ? ` · ${P.title}` : "");
+    $("sub").textContent = "Змініть текст і надішліть Малевичу. Числа, джерела й сірі поля — у чаті.";
+
+    const values = {}, boxes = {};
+    const wrap = $("fields");
+    for (const x of P.f) {
+      const box = document.createElement("div");
+      box.className = "field" + (x.ro ? " ro" : "");
+      const lab = document.createElement("label");
+      const k = document.createElement("span");
+      k.className = "k"; k.textContent = x.label;
+      lab.appendChild(k);
+      if (x.ro) { const s = document.createElement("span"); s.textContent = "змінити в чаті"; lab.appendChild(s); }
+      const el = document.createElement(x.one ? "input" : "textarea");
+      el.id = lab.htmlFor = "f-" + x.key;
+      el.dataset.key = x.key;
+      el.value = x.text;
+      el.spellcheck = true;
+      el.setAttribute("autocomplete", "off");
+      if (x.one) { el.type = "text"; el.enterKeyHint = "done"; } else el.rows = 1;
+      if (x.ro) {
+        el.readOnly = true; el.tabIndex = -1; el.setAttribute("aria-readonly", "true");
+        if (!x.text) el.placeholder = "(не вмістилося в посилання)";
+      }
+      const err = document.createElement("div");
+      err.className = "err";
+      box.append(lab, el, err);
+      wrap.appendChild(box);
+      boxes[x.key] = { box, el, err };
+      if (!x.ro) {
+        values[x.key] = x.text;
+        el.addEventListener("input", () => { values[x.key] = el.value; grow(el); update(); });
+        if (x.one) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+      }
+    }
+
+    const send = $("send"), copyBtn = $("copy"), preview = $("preview");
+    let cur = null;
+    function update() {
+      cur = evaluate(P, values);
+      for (const x of P.f) {
+        if (x.ro) continue;
+        const b = boxes[x.key];
+        b.err.textContent = cur.errors[x.key] || "";
+        b.box.classList.toggle("changed", cur.items.some((i) => i[0] === x.key));
+      }
+      const we = $("words");
+      we.textContent = `Слів на слайді: ${cur.words} / ${P.wmax}`;
+      we.className = cur.words > P.wmax ? "over" : "";
+      we.title = cur.words > P.wmax ? "Більше норми — Малевич перевірить, чи вміщується" : "";
+      const ce = $("chars");
+      ce.textContent = `Символів: ${cur.chars} / ${P.max}`;
+      ce.className = cur.chars > P.max ? "block" : "";
+      const st = $("status");
+      st.textContent = cur.ok ? `Змінено полів: ${cur.items.length}` : cur.reason;
+      st.className = cur.ok || !cur.items.length ? "" : "bad";
+      $("msg").textContent = cur.msg;
+      copyBtn.disabled = !cur.ok;
+      if (tier === "web") {
+        if (cur.ok) {
+          send.href = "https://t.me/" + P.bot + "?text=" + encodeURIComponent(cur.msg);
+          send.removeAttribute("aria-disabled");
+        } else {
+          send.removeAttribute("href");
+          send.setAttribute("aria-disabled", "true");
+        }
+      }
+      if (MB) {
+        const tp = tg.themeParams || {};
+        MB.setParams({ text: "Надіслати Малевичу", is_visible: true, is_active: cur.ok,
+                       color: cur.ok ? (tp.button_color || "#2a7de1") : (tp.hint_color || "#8a8a8e"),
+                       text_color: tp.button_text_color || "#ffffff" });
+      }
+    }
+
+    function leave(url) {
+      try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
+      tg.openTelegramLink(url);
+      setTimeout(() => tg.close(), 300);
+    }
+    function sendA() {
+      update();
+      if (!cur.ok) return;
+      leave("https://t.me/" + P.bot + "?text=" + encodeURIComponent(cur.msg));
+    }
+    function copyAndOpen() {
+      update();
+      if (!cur.ok) return;
+      copy(cur.msg).then((ok) => {
+        if (!ok) {
+          preview.hidden = false; preview.open = true;
+          toast("Не вдалося скопіювати — виділіть текст нижче й скопіюйте вручну", 4000);
+          return;
+        }
+        if (!inTg) return toast("Скопійовано");
+        toast("Скопійовано — вставте в чат і надішліть");
+        setTimeout(() => leave("https://t.me/" + P.bot), 900);
+      });
+    }
+
+    copyBtn.hidden = false;
+    copyBtn.addEventListener("click", copyAndOpen);
+    preview.hidden = false;
+    if (tier === "A") {
+      copyBtn.textContent = "Скопіювати";
+      MB.onClick(sendA);
+    } else if (tier === "B") {
+      copyBtn.textContent = "Скопіювати й відкрити чат";
+      copyBtn.classList.remove("second");
+    } else if (tier === "C") {
+      copyBtn.textContent = "Скопіювати";
+      copyBtn.classList.remove("second");
+      preview.open = true;
+    } else {                                              // outside Telegram: a plain link
+      send.hidden = false;
+      copyBtn.textContent = "Скопіювати";
+      if (P.tier !== "A" && P.tier !== "B") preview.open = true;
+    }
+    if (inTg && tier !== "A" && tg.MainButton) tg.MainButton.hide();
+
+    update();
+    for (const x of P.f) grow(boxes[x.key].el);
+    window.addEventListener("resize", () => { for (const x of P.f) grow(boxes[x.key].el); });
+    // test hook: the validation of arbitrary values (an <input> cannot hold a newline)
+    window.__malevychForm = Object.freeze({ evaluate: (v) => { const r = evaluate(P, Object.assign({}, values, v));
+                                                                 return { ok: r.ok, reason: r.reason, errors: r.errors,
+                                                                          msg: r.msg, words: r.words }; } });
+    if (tg) {
+      try {
+        tg.ready(); tg.expand();
+        if (inTg) tg.enableClosingConfirmation();
+      } catch (e) { /* outside Telegram */ }
+    }
+  }
+  main().catch(() => fatal(BROKEN));
+})();
+</script>
+</body>
+</html>
