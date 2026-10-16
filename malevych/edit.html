@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GwWgnhUi8InQINPdq09acg0a9HtlajJW/oRxjiGRvmQ=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DwG1Va5qLV2uIlnQ20CEgA30ipeeHmd+N7NJz5Ki0ZU=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -173,7 +173,9 @@
 "use strict";
 (function () {
   const tg = (window.Telegram && window.Telegram.WebApp) || null;
-  const inTg = !!(tg && typeof tg.initData === "string" && tg.initData);
+  // Inside Telegram: initData is EMPTY for a reply-keyboard launch (the tier K entry) and in inline mode, so the
+  // platform (always passed as tgWebAppPlatform; "unknown" outside Telegram) decides as well.
+  const inTg = !!(tg && ((typeof tg.initData === "string" && tg.initData) || (tg.platform && tg.platform !== "unknown")));
   const RAW_HASH = location.hash.slice(1);            // read once, before anything can touch it
   const RO = 1, ONE_LINE = 2;
   const END = "⟦кінець⟧";
