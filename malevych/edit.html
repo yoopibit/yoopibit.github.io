@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EFe673Ff/gcBScmb/xDb8A2/XE+FnKOm0/UO1Hppy24=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GwWgnhUi8InQINPdq09acg0a9HtlajJW/oRxjiGRvmQ=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -552,6 +552,10 @@
     const all = {};                                     // sid → {ref: {label, raw}}
     let C = null;                                       // {P, S, notes, sel, it, hist}: the slide on screen
     let cur = null;                                     // the message as it stands: {msg, ok, reason, n, bytes}
+    let kIgnored = false;                               // tier K: sendData was dropped, the button now goes via chat
+    const K_WAIT = 2000;
+    const K_IGNORED = "Telegram не передав нотатки: форму відкрито не кнопкою «✏️ Правки» під полем вводу. "
+      + "Натисни «Надіслати через чат» — текст піде в чат, лишиться натиснути ➤.";
     document.title = deck ? "Нотатки до слайдів" : `Слайд ${M.one.n} · нотатки`;
 
     // -- view: the form's own image-viewer gestures (tap, double tap, pinch, pan); no zoom on selection -------
@@ -890,8 +894,10 @@
         }
       }
       if (tier === "A" || tier === "K") {
-        sendBtn.textContent = n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу";
+        const label = kIgnored ? "Надіслати через чат" : "Надіслати Малевичу";
+        sendBtn.textContent = n ? `${label} (${n})` : label;
         sendBtn.disabled = !cur.ok;
+        if (kIgnored && cur.ok) $("status").textContent = K_IGNORED;
       }
     }
     function leave(url) {
@@ -920,14 +926,25 @@
     }
     // tier K: a keyboard-button Mini App can send straight to the bot (sendData; Telegram then closes the app).
     // Opened any other way (an inline button has a query_id) or if it throws: the copy + link fallback.
+    // Opened from anywhere but the reply keyboard (recent apps, a link), Telegram drops sendData silently and the app
+    // stays open: if it is still open after K_WAIT, the button turns into the fallback for the next tap (it needs a
+    // gesture to copy and open the chat).
     function sendK() {
       update();
       if (!cur.ok) return;
-      const keyboard = typeof tg.sendData === "function" && !(tg.initDataUnsafe && tg.initDataUnsafe.query_id);
+      const keyboard = !kIgnored && typeof tg.sendData === "function"
+        && !(tg.initDataUnsafe && tg.initDataUnsafe.query_id);
       if (keyboard) {
         try {
           try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
           tg.sendData(cur.msg);
+          sendBtn.disabled = true;
+          setTimeout(() => {
+            kIgnored = true;
+            try { tg.enableClosingConfirmation(); } catch (e) { /* old client */ }
+            update();
+            toast(K_IGNORED, 6000);
+          }, K_WAIT);
           return;
         } catch (e) { /* fall back */ }
       }
