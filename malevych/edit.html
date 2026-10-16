@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://telegram.org; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KV0vkS24MpAE1YEOb4nbqLH5Ro/7btqlzeUyHRvbxf8=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Правки слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -74,12 +74,28 @@
     text-align: center; font-size: 15px;
   }
   .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
+  .field { scroll-margin-top: calc(var(--pvh, 0px) + 10px); }
+  .field.hl { box-shadow: 0 0 0 2px var(--btn); }
+  .pv {
+    position: sticky; z-index: 5; margin: 0 -16px 12px; padding: 4px 16px 6px; background: var(--sec);
+    top: calc(max(env(safe-area-inset-top), var(--tg-safe-area-inset-top, 0px)) + var(--tg-content-safe-area-inset-top, 0px));
+  }
+  .pvbox {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; contain: layout paint;
+    border-radius: 10px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  }
+  .pvhost { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+  .pvnote { font-size: 12px; color: var(--hint); margin: 5px 2px 0; }
 </style>
 </head>
 <body>
 <main id="app">
   <h1 id="head"></h1>
   <p class="sub" id="sub"></p>
+  <div id="pv" class="pv" hidden>
+    <div id="pvbox" class="pvbox"></div>
+    <p class="pvnote">Прев'ю приблизне — точний вигляд прийде від Малевича</p>
+  </div>
   <div id="fields"></div>
   <div class="meta"><span id="words"></span><span id="chars"></span></div>
   <div id="status" role="status"></div>
@@ -146,6 +162,8 @@
       wmax: isInt(w.max) ? w.max : 40, wother: isInt(w.other) ? w.other : 0,
       max: isInt(p.max) && p.max > 0 ? p.max : 3500,
       tier: typeof p.tier === "string" ? p.tier : "",
+      pv: p.pv && typeof p.pv === "object" && typeof p.pv.html === "string" && typeof p.pv.css === "string"
+        ? { html: p.pv.html, css: p.pv.css } : null,
       f: p.f.map(([key, label, text, flags]) => ({ key, label, text, ro: !!((flags || 0) & RO),
                                                    one: !!((flags || 0) & ONE_LINE) })),
     };
@@ -253,6 +271,111 @@
     return Promise.resolve(legacy());
   }
 
+  // -- the slide preview: hostile HTML from the URL, parsed inert, sanitised, shown in a shadow root -------
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const DROP = new Set(["script", "iframe", "frame", "frameset", "object", "embed", "applet", "foreignobject",
+    "link", "meta", "base", "form", "input", "button", "select", "option", "textarea", "audio", "video", "source",
+    "track", "style", "template", "noscript", "noembed", "noframes", "title", "portal", "animate", "animatemotion",
+    "animatetransform", "set", "discard", "handler", "listener"]);
+  const URL_ATTRS = new Set(["href", "src", "action", "formaction", "srcset", "srcdoc", "poster", "background",
+    "ping", "data", "lowsrc", "dynsrc", "codebase", "cite", "longdesc", "manifest", "base"]);
+  const NEVER = new Set(["autofocus", "contenteditable", "tabindex", "is", "accesskey", "popover", "popovertarget"]);
+  const DATA_IMG = /^data:image\//i;
+  function sanitize(html) {
+    const doc = new DOMParser().parseFromString("<!doctype html><html><head></head><body>" + html, "text/html");
+    for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+      if (DROP.has(el.localName.toLowerCase())) { el.remove(); continue; }
+      for (const a of Array.from(el.attributes)) {
+        const n = a.name.toLowerCase(), ln = a.localName.toLowerCase();
+        const v = a.value.replace(/[\u0000- \u007f-\u009f]/g, "");
+        const url = URL_ATTRS.has(n) || URL_ATTRS.has(ln) || n === "xlink:href";
+        if (n.startsWith("on") || ln.startsWith("on") || NEVER.has(n)
+            || (url && !(ln !== "srcset" && ln !== "srcdoc" && DATA_IMG.test(v)))) el.removeAttributeNode(a);
+      }
+    }
+    const sec = doc.body.querySelector("section");
+    return sec && sec.parentNode ? sec : null;
+  }
+  const SHADOW_CSS = `
+    .mf-stage { all: initial; display: block; position: relative; transform-origin: 0 0; overflow: hidden;
+                background: #fff; color: #000; color-scheme: light; font-family: "Noto Sans", sans-serif;
+                user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+    .mf-stage [data-mf] { cursor: pointer; }
+    .mf-stage > .mf-ring { position: absolute !important; pointer-events: none !important; box-sizing: border-box !important;
+                           border-style: solid !important; border-color: #2a8cff !important; z-index: 2147483647 !important;
+                           display: block !important; margin: 0 !important; background: none !important; }
+    .mf-stage > .mf-ring[hidden] { display: none !important; }`;
+  function buildSlide(P) {
+    if (!P.pv) return null;
+    let sec = null;
+    try { sec = sanitize(P.pv.html); } catch (e) { sec = null; }
+    if (!sec) return null;
+    const dim = (x, d) => { const n = parseInt(x, 10); return n >= 100 && n <= 10000 ? n : d; };
+    const W = dim(sec.getAttribute("data-w"), 1920), H = dim(sec.getAttribute("data-h"), 1080);
+    const wrap = $("pv"), box = $("pvbox");
+    box.style.aspectRatio = W + " / " + H;
+    const host = document.createElement("div");
+    host.className = "pvhost";
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = P.pv.css.replace(/:root\b/g, ":host") + "\n" + SHADOW_CSS;
+    const stage = document.createElement("div");
+    stage.className = "mf-stage";
+    stage.style.width = W + "px"; stage.style.height = H + "px";
+    sec = document.adoptNode(sec);
+    sec.style.width = W + "px"; sec.style.height = H + "px"; sec.style.margin = "0";
+    const ring = document.createElement("div");
+    ring.className = "mf-ring"; ring.hidden = true;
+    stage.append(sec, ring);
+    root.append(style, stage);
+    box.appendChild(host);
+    wrap.hidden = false;
+    const els = {}, orig = {};
+    for (const el of sec.querySelectorAll("[data-mf]")) {
+      const k = el.getAttribute("data-mf");
+      if (!els[k]) { els[k] = el; orig[k] = Array.from(el.childNodes, (c) => c.cloneNode(true)); }
+    }
+    const S = { root, stage, ring, els, scale: 1, active: null };
+    S.place = function () {
+      const el = S.active && els[S.active];
+      if (!el) { ring.hidden = true; return; }
+      const s = S.scale, sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const pad = 3 / s, bw = 2 / s;
+      ring.style.left = (r.left - sr.left) / s - pad + "px";
+      ring.style.top = (r.top - sr.top) / s - pad + "px";
+      ring.style.width = r.width / s + 2 * pad + "px";
+      ring.style.height = Math.max(r.height / s, 8 / s) + 2 * pad + "px";
+      ring.style.borderWidth = bw + "px";
+      ring.style.borderRadius = 4 / s + "px";
+      ring.hidden = false;
+    };
+    S.fit = function () {
+      S.scale = box.clientWidth / W || 1;
+      stage.style.transform = `scale(${S.scale})`;
+      document.documentElement.style.setProperty("--pvh", wrap.offsetHeight + "px");
+      S.place();
+    };
+    // typing: text nodes (+ <br> in HTML fields) only, never parsed markup
+    S.paint = function (k, v, original) {
+      const el = els[k];
+      if (!el) return;
+      if (v === original) el.replaceChildren(...orig[k].map((c) => c.cloneNode(true)));
+      else if (el.namespaceURI === SVG_NS) el.replaceChildren(document.createTextNode(v.replace(/\n/g, " ")));
+      else {
+        el.replaceChildren();
+        v.split("\n").forEach((line, i) => {
+          if (i) el.appendChild(document.createElement("br"));
+          if (line) el.appendChild(document.createTextNode(line));
+        });
+      }
+      if (S.active === k) S.place();
+    };
+    if (window.ResizeObserver) new ResizeObserver(() => S.fit()).observe(box);
+    window.addEventListener("resize", () => S.fit());
+    S.fit();
+    return S;
+  }
+
   async function main() {
     let P = null;
     try {
@@ -265,7 +388,7 @@
     const tier = inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web";
     const MB = inTg && tier === "A" ? tg.MainButton : null;
     document.title = `Слайд ${P.n} · правки`;
-    $("head").textContent = `Слайд ${P.n} · v${P.ver}` + (P.title ? ` · ${P.title}` : "");
+    $("head").textContent = `Слайд ${P.n}` + (P.title ? ` · ${P.title}` : "");
     $("sub").textContent = "Змініть текст і надішліть Малевичу. Числа, джерела й сірі поля — у чаті.";
 
     const values = {}, boxes = {};
@@ -296,9 +419,41 @@
       boxes[x.key] = { box, el, err };
       if (!x.ro) {
         values[x.key] = x.text;
-        el.addEventListener("input", () => { values[x.key] = el.value; grow(el); update(); });
+        el.addEventListener("input", () => {
+          values[x.key] = el.value; grow(el); update();
+          if (slide) slide.paint(x.key, clean(el.value), x.text);
+        });
         if (x.one) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
       }
+      el.addEventListener("focus", () => setActive(x.key));
+      el.addEventListener("blur", () => setTimeout(() => {
+        const a = document.activeElement;
+        if (!(a && a.dataset && a.dataset.key)) setActive(null);
+      }, 0));
+    }
+
+    const byKey = Object.fromEntries(P.f.map((x) => [x.key, x]));
+    const slide = buildSlide(P);
+    function setActive(k) {
+      if (slide && slide.active === k) return;
+      for (const key in boxes) boxes[key].box.classList.toggle("hl", key === k);
+      if (!slide) return;
+      if (slide.active && slide.els[slide.active]) slide.els[slide.active].removeAttribute("data-mf-hl");
+      slide.active = k;
+      if (k && slide.els[k]) slide.els[k].setAttribute("data-mf-hl", "");
+      slide.place();
+    }
+    if (slide) {
+      slide.root.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target.closest("[data-mf]") : null;
+        const x = t && byKey[t.getAttribute("data-mf")];
+        if (!x) return;
+        if (x.ro) { setActive(x.key); return toast("це змінюється в чаті", 1800); }
+        const b = boxes[x.key];
+        b.el.focus({ preventScroll: true });
+        b.box.scrollIntoView({ block: "start" });
+        setActive(x.key);
+      });
     }
 
     const send = $("send"), copyBtn = $("copy"), preview = $("preview");
