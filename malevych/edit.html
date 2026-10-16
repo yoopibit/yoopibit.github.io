@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-l8WmNq48Y610ffRBK029s5A+bFBtkABpdIGs41L5dzM=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PWrV9H9uHHaqdpkWc+PO+FObbnCZcTiE4JGz/z6Expk=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -109,12 +109,39 @@
   .done p { margin: 0 0 12px; font-size: 16px; }
   .done .btn { margin: 0 0 8px; }
   .done .btn.second { background: var(--sec); color: var(--link); }
+  .back { margin: 0 0 8px; color: var(--link); }
+  .hint { color: var(--hint); font-size: 14px; margin: 0 2px 10px; }
+  .strip { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 12px; scroll-snap-type: x proximity; }
+  .thumb {
+    flex: none; position: relative; width: 148px; padding: 0; border: 0; background: none; color: var(--fg);
+    font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; -webkit-tap-highlight-color: transparent;
+  }
+  .thumb .tbox {
+    position: relative; width: 148px; aspect-ratio: 16 / 9; overflow: hidden; contain: layout paint; border-radius: 8px;
+    background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  }
+  .thumb .tbox.none { display: flex; align-items: center; justify-content: center; color: #888; font-size: 12px; }
+  .thumb .tbox .pvhost { pointer-events: none; }
+  .thumb.cur .tbox { box-shadow: 0 0 0 2px var(--btn); }
+  .thumb .tnum { display: block; font-size: 13px; color: var(--hint); margin: 4px 2px 0; }
+  .thumb .tbadge {
+    position: absolute; top: 5px; right: 5px; z-index: 2; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+    background: var(--btn); color: var(--btn-fg); font-size: 13px; font-weight: 600; line-height: 22px; text-align: center;
+  }
+  .bytes { color: var(--hint); font-size: 13px; margin: 0 2px 6px; }
+  .bytes.over { color: var(--bad); font-weight: 600; }
   .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
 </style>
 </head>
 <body>
 <main id="app">
+  <button id="back" class="chip back" type="button" hidden>← слайди</button>
   <h1 id="head"></h1>
+  <div id="deckview" hidden>
+    <p class="hint">Торкнись слайда, щоб залишити нотатки. Надіслати можна все разом.</p>
+    <div id="strip" class="strip" aria-label="Слайди"></div>
+  </div>
+  <div id="slideview">
   <div id="pv" class="pv" hidden>
     <div id="iters" class="iters" hidden aria-label="Версії слайда"></div>
     <div id="pvbox" class="pvbox"><div id="itbadge" class="itbadge" hidden></div></div>
@@ -128,6 +155,8 @@
     <label id="nlabel" for="note">Весь слайд</label>
     <textarea id="note" rows="2" placeholder="Що покращити?" spellcheck="true" autocomplete="off"></textarea>
   </div>
+  </div>
+  <div id="bytes" class="bytes" hidden></div>
   <div id="status" role="status"></div>
   <a id="send" class="btn" hidden rel="noopener">Надіслати Малевичу</a>
   <div id="done" class="done" hidden role="status">
@@ -354,7 +383,6 @@
     .mf-stage > [hidden] { display: none !important; }
     .mf-stage svg * { pointer-events: visible !important; }   /* unfilled shapes are tappable inside, too */`;
 
-  // the sanitised slide in a shadow root, scaled to the box; zoom = one transform on the stage
   // one version of the slide, sanitised and sized, ready to sit in the stage: {sec, W, H} or null
   function makeSec(html) {
     let sec = null;
@@ -366,6 +394,20 @@
     sec.style.width = W + "px"; sec.style.height = H + "px"; sec.style.margin = "0";
     return { sec, W, H };
   }
+  // a shadow root holding a sanitised slide version (pv.css + the house CSS), scaled by one transform on the stage
+  function shadowStage(css, v) {
+    const host = document.createElement("div");
+    host.className = "pvhost";
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = css.replace(/:root\b/g, ":host") + "\n" + SHADOW_CSS;
+    const stage = document.createElement("div");
+    stage.className = "mf-stage";
+    stage.style.width = v.W + "px"; stage.style.height = v.H + "px";
+    stage.appendChild(v.sec);
+    root.append(style, stage);
+    return { host, root, stage };
+  }
   function buildSlide(P) {
     if (!P.pv) return null;
     const now = makeSec(P.pv.html);
@@ -373,18 +415,10 @@
     const { sec, W, H } = now;
     const box = $("pvbox");
     box.style.aspectRatio = W + " / " + H;
-    const host = document.createElement("div");
-    host.className = "pvhost";
-    const root = host.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
-    style.textContent = P.pv.css.replace(/:root\b/g, ":host") + "\n" + SHADOW_CSS;
-    const stage = document.createElement("div");
-    stage.className = "mf-stage";
-    stage.style.width = W + "px"; stage.style.height = H + "px";
+    const { host, root, stage } = shadowStage(P.pv.css, now);
     const ring = document.createElement("div");
     ring.className = "mf-ring"; ring.hidden = true;
-    stage.append(sec, ring);
-    root.append(style, stage);
+    stage.appendChild(ring);
     box.appendChild(host);
     $("pv").hidden = false;
     const els = {};
@@ -393,6 +427,15 @@
       if (/^[1-9]\d{0,5}$/.test(n) && !els["e" + n]) els["e" + n] = el;
     }
     return { root, stage, sec, ring, els, W, H, box, k: 1, pins: [], now, shown: now };
+  }
+  // a deck thumbnail: the same sanitiser and shadow DOM, scaled to the thumbnail's width, not interactive
+  function buildThumb(P, tbox, width) {
+    const v = P.pv && makeSec(P.pv.html);
+    if (!v) { tbox.classList.add("none"); tbox.textContent = "прев'ю недоступне"; return; }
+    tbox.style.aspectRatio = v.W + " / " + v.H;
+    const { host, stage } = shadowStage(P.pv.css, v);
+    stage.style.transform = `scale(${(width / v.W).toFixed(5)})`;
+    tbox.appendChild(host);
   }
   // show another version in the same stage (S.sec stays the current slide: selection and notes belong to it)
   function swapSec(S, v) {
@@ -448,31 +491,74 @@
     return "Елемент";
   }
 
+  // -- the keyboard deck (tier K, §12): #b=<id>&k=<key> → d/<id>.bin = iv(12) ‖ AES-256-GCM(deflate-raw(JSON)) -----
+  const DECK_BAD = "Дані деку недоступні — попроси Малевича надіслати нову кнопку ✏️ Правки";
+  const SENDDATA_MAX = 4096;                          // Telegram's limit for WebApp.sendData
+  async function loadDeck(id, k) {
+    if (typeof id !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) throw new Error("id");
+    const raw = b64uToBytes(k || "");
+    if (raw.length !== 32) throw new Error("key");
+    const r = await fetch("d/" + id + ".bin", { cache: "no-store", credentials: "omit", redirect: "error" });
+    if (!r.ok) throw new Error("http " + r.status);
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.length < 12 + 16 + 1) throw new Error("short");
+    const key = await crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+    return checkDeck(JSON.parse(await inflate(new Uint8Array(plain))));
+  }
+  function checkDeck(b) {                             // strict: one bad slide → no deck
+    if (!b || typeof b !== "object" || b.v !== 1) return null;
+    if (typeof b.bot !== "string" || !/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(b.bot) || !hex8(b.pid)) return null;
+    if (!Array.isArray(b.slides) || !b.slides.length || b.slides.length > 300) return null;
+    const slides = [], sids = new Set();
+    for (const s of b.slides) {
+      const P = checkPayload(s);
+      if (!P || P.pid !== b.pid || P.bot !== b.bot || sids.has(P.sid)) return null;
+      if (s.pv !== undefined && !P.pv) return null;
+      if (P.pv && s.pv.hist !== undefined && (!Array.isArray(s.pv.hist) || P.pv.hist.length !== s.pv.hist.length)) return null;
+      sids.add(P.sid);
+      slides.push(P);
+    }
+    const mb = isInt(b.max_bytes) && b.max_bytes > 0 ? Math.min(b.max_bytes, SENDDATA_MAX) : SENDDATA_MAX;
+    return { bot: b.bot, pid: b.pid, title: typeof b.title === "string" ? b.title : "", maxBytes: mb, slides };
+  }
+  const utf8len = (s) => new TextEncoder().encode(s).length;
+
   async function main() {
-    let P = null;
+    const hp = new URLSearchParams(RAW_HASH);
+    if (hp.has("b") || hp.has("k")) {                 // the keyboard deck
+      let D = null;
+      try { D = await loadDeck(hp.get("b"), hp.get("k")); } catch (e) { D = null; }
+      if (!D) return fatal(DECK_BAD);
+      return run({ deck: D, bot: D.bot, title: D.title, tier: inTg ? "K" : "web" });
+    }
+    let P = null;                                     // one slide from an inline ✏️ button
     try {
-      const d = new URLSearchParams(RAW_HASH).get("d");
+      const d = hp.get("d");
       if (d) P = checkPayload(await decodeD(d));
     } catch (e) { P = null; }
     if (!P) return fatal(BROKEN);
+    return run({ deck: null, one: P, bot: P.bot, title: P.title,
+                 tier: inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web" });
+  }
 
-    const tier = inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web";
-    document.title = `Слайд ${P.n} · нотатки`;
-    $("head").textContent = `Слайд ${P.n}` + (P.title ? ` · ${P.title}` : "");
-
-    const S = buildSlide(P);
-    if (!S) $("nopv").hidden = false;
+  // one UI for both modes: the slide view works on the current slide C; the deck adds a strip and per-slide notes
+  function run(M) {
+    const { deck, tier, bot, title } = M;
     const note = $("note"), nlabel = $("nlabel"), wider = $("wider"), chips = $("chips");
     const send = $("send"), copyBtn = $("copy"), pre = $("msg"), sendBtn = $("sendA");
-    const notes = {};                                    // ref → {label, raw}
-    let sel = "slide", cur = null;
-    let it = null;                                       // the earlier version on screen, or null: the current slide
+    const iters = $("iters"), badge = $("itbadge"), pvbox = $("pvbox");
+    const all = {};                                     // sid → {ref: {label, raw}}
+    let C = null;                                       // {P, S, notes, sel, it, hist}: the slide on screen
+    let cur = null;                                     // the message as it stands: {msg, ok, reason, n, bytes}
+    document.title = deck ? "Нотатки до слайдів" : `Слайд ${M.one.n} · нотатки`;
 
     // -- view: the form's own image-viewer gestures (tap, double tap, pinch, pan); no zoom on selection -------
     const V = { z: 1, tx: 0, ty: 0 };                  // zoom over fit (1…5), translate in box px
     const ZMAX = 5, ZDBL = 2.5, SLOP = 8, DBL_MS = 280;
-    const fitK = () => S.box.clientWidth / S.W || 1;
+    const fitK = () => C.S.box.clientWidth / C.S.W || 1;
     function view(animate) {
+      const S = C && C.S;
       if (!S) return;
       const k0 = fitK();
       V.z = Math.min(ZMAX, Math.max(1, V.z));
@@ -485,16 +571,17 @@
       overlays();
     }
     function fit(animate) { V.z = 1; V.tx = 0; V.ty = 0; view(animate); }
-    function zoomAround(x, y, z, animate) {            // keep the slide point under (x, y) there… or centre it
-      const k0 = fitK() * V.z, cx = (x - V.tx) / k0, cy = (y - V.ty) / k0;
+    function zoomAround(x, y, z, animate) {            // the slide point under (x, y) moves to the centre
+      const S = C.S, k0 = fitK() * V.z, cx = (x - V.tx) / k0, cy = (y - V.ty) / k0;
       V.z = Math.min(ZMAX, Math.max(1, z));
       const k = fitK() * V.z;
       V.tx = S.box.clientWidth / 2 - cx * k; V.ty = S.box.clientHeight / 2 - cy * k;
       view(animate);
     }
-    function gestures() {
-      const box = S.box, pts = new Map();
+    (function gestures() {                             // bound once to the box; they act on whatever slide is shown
+      const box = pvbox, pts = new Map();
       let g = null, lastTap = null;
+      const live = () => !!(C && C.S);
       const local = (e) => { const r = box.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
       function startPinch() {
         const [a, b] = Array.from(pts.values());
@@ -503,6 +590,7 @@
               c: { x: (m.x - V.tx) / k0, y: (m.y - V.ty) / k0 } };
       }
       box.addEventListener("pointerdown", (e) => {
+        if (!live()) return;
         try { box.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
         const p = local(e);
         pts.set(e.pointerId, p);
@@ -510,7 +598,7 @@
         else if (pts.size === 2) startPinch();
       });
       box.addEventListener("pointermove", (e) => {
-        if (!pts.has(e.pointerId) || !g) return;
+        if (!pts.has(e.pointerId) || !g || !live()) return;
         const p = local(e);
         pts.set(e.pointerId, p);
         if (g.mode === "pinch" && pts.size >= 2) {
@@ -529,7 +617,7 @@
       function end(e) {
         if (!pts.has(e.pointerId)) return;
         pts.delete(e.pointerId);
-        if (!g) return;
+        if (!g || !live()) { if (!pts.size) g = null; return; }
         if (g.mode === "pinch") {                         // a finger left: the other one pans on from here
           if (pts.size === 1) { const r = Array.from(pts.values())[0]; g = { mode: "pan", sx: r.x, sy: r.y, tx0: V.tx, ty0: V.ty }; }
           else if (!pts.size) g = null;
@@ -550,14 +638,15 @@
           if (V.z > 1.01) fit(true); else zoomAround(t.sx, t.sy, ZDBL, true);
           return;
         }
-        if (it) return;                                   // an earlier version: look only, nothing to select
-        const el = t.target instanceof Element ? t.target.closest("[data-e]") : null;
+        if (C.it) return;                                 // an earlier version: look only, nothing to select
+        const S = C.S, el = t.target instanceof Element ? t.target.closest("[data-e]") : null;
         select(el && el !== S.sec && S.sec.contains(el) ? "e" + el.getAttribute("data-e") : "slide");
       }
-    }
+    })();
     function overlays() {
+      const S = C && C.S;
       if (!S) return;
-      const k = S.k, el = !it && sel !== "slide" && S.els[sel];
+      const k = S.k, el = !C.it && C.sel !== "slide" && S.els[C.sel];
       if (el) {
         const b = contentRect(S, el), pad = 3 / k;
         Object.assign(S.ring.style, { left: b.x - pad + "px", top: b.y - pad + "px", width: b.w + 2 * pad + "px",
@@ -566,7 +655,7 @@
       S.ring.hidden = !el;
       for (const p of S.pins) p.remove();
       S.pins = [];
-      if (it) return;                                     // the pins mark the current slide's elements
+      if (C.it) return;                                   // the pins mark the current slide's elements
       elementRefs().forEach((r, i) => {
         const e = S.els[r];
         if (!e) return;
@@ -580,54 +669,50 @@
         S.pins.push(pin);
       });
     }
-    const elementRefs = () => Object.keys(notes).filter((r) => r !== "slide").sort((a, b) => refOrder(a) - refOrder(b));
+    const elementRefs = () => Object.keys(C.notes).filter((r) => r !== "slide").sort((a, b) => refOrder(a) - refOrder(b));
 
     // -- selection ------------------------------------------------------------------------------------
     function select(ref, reset) {
-      if (S && sel !== "slide" && S.els[sel]) S.els[sel].removeAttribute("data-mf-sel");
-      sel = S && S.els[ref] ? ref : "slide";
-      if (S && sel !== "slide") S.els[sel].setAttribute("data-mf-sel", "");
-      nlabel.textContent = notes[sel] ? notes[sel].label : labelFor(P, S, sel);
-      note.value = notes[sel] ? notes[sel].raw : "";
+      const S = C.S, notes = C.notes;
+      if (S && C.sel !== "slide" && S.els[C.sel]) S.els[C.sel].removeAttribute("data-mf-sel");
+      C.sel = S && S.els[ref] ? ref : "slide";
+      if (S && C.sel !== "slide") S.els[C.sel].setAttribute("data-mf-sel", "");
+      nlabel.textContent = notes[C.sel] ? notes[C.sel].label : labelFor(C.P, S, C.sel);
+      note.value = notes[C.sel] ? notes[C.sel].raw : "";
       grow(note);
-      wider.disabled = sel === "slide";
+      wider.disabled = C.sel === "slide";
       if (reset && S) fit(true); else overlays();
       renderChips();
     }
     function parentRef() {
-      const el = S && sel !== "slide" && S.els[sel];
+      const S = C.S, el = S && C.sel !== "slide" && S.els[C.sel];
       const up = el && el.parentElement && el.parentElement.closest("[data-e]");
       return up && up !== S.sec && S.sec.contains(up) ? "e" + up.getAttribute("data-e") : "slide";
     }
     function renderChips() {
       chips.textContent = "";
-      const mk = (text, ref, title) => {
+      const mk = (text, ref, ttl) => {
         const b = document.createElement("button");
-        b.type = "button"; b.className = "chip" + (ref === sel ? " on" : ""); b.textContent = text;
-        b.dataset.ref = ref; if (title) b.title = title;
+        b.type = "button"; b.className = "chip" + (ref === C.sel ? " on" : ""); b.textContent = text;
+        b.dataset.ref = ref; if (ttl) b.title = ttl;
         b.addEventListener("click", () => select(ref, ref === "slide"));   // «Весь слайд» also fits
         chips.appendChild(b);
       };
-      elementRefs().forEach((r, i) => mk(String(i + 1), r, notes[r].label));
-      mk(notes.slide ? "Весь слайд ✎" : "Весь слайд", "slide");
+      elementRefs().forEach((r, i) => mk(String(i + 1), r, C.notes[r].label));
+      mk(C.notes.slide ? "Весь слайд ✎" : "Весь слайд", "slide");
     }
-    if (S) {
-      gestures();
-      wider.addEventListener("click", () => select(parentRef()));      // never changes the zoom
-      if (window.ResizeObserver) new ResizeObserver(() => view(false)).observe(S.box);
-      else window.addEventListener("resize", () => view(false));
-      view(false);
-    }
+    wider.addEventListener("click", () => select(parentRef()));          // never changes the zoom
+    if (window.ResizeObserver) new ResizeObserver(() => view(false)).observe(pvbox);
+    else window.addEventListener("resize", () => view(false));
 
     // -- versions: «1 · 2 · ✏️ 3 · зараз»; an earlier one is shown read-only in the same box, zoom and pan kept ----
-    const hist = (S && P.pv.hist) || [];
-    const iters = $("iters"), badge = $("itbadge");
     const ICON = { loop: "", edit: "✏️ ", notes: "📝 ", chat: "💬 " };
     const WHAT = { loop: "", edit: "твоя правка з форми", notes: "переробка за твоїми нотатками",
                    chat: "переробка за твоєю правкою в чаті" };
     const means = (x) => x.m.map(([c, v]) => c + " " + v.toFixed(1)).join(" · ");
     const subline = (x) => means(x) || (x.b ? "лінт ✗" : x.kind === "edit" ? "твоя правка" : "");
     function showIter(x) {                               // x: a hist entry, or null for «зараз»
+      const S = C.S;
       if (x && x.cur) x = null;                          // that version is the one on the slide now
       if (x && !x.v) {
         x.v = makeSec(x.h);
@@ -635,7 +720,7 @@
       }
       const v = x ? x.v : S.now, keep = v.W === S.W && v.H === S.H;
       swapSec(S, v);
-      it = x;
+      C.it = x;
       $("tools").hidden = !!x;
       note.disabled = !!x;
       badge.hidden = !x;
@@ -650,21 +735,22 @@
       } else {
         note.placeholder = "Що покращити?";
         if (!keep) fit(false);
-        select(sel);                                     // label, note text, ring and pins of the current slide
+        select(C.sel);                                   // label, note text, ring and pins of the current slide
       }
       renderIters();
     }
-    function chip(top, sub, title, on, extra) {
+    function chip(top, sub, ttl, on, extra) {
       const b = document.createElement("button");
       b.type = "button"; b.className = "chip it" + (on ? " on" : "") + (extra || "");
       const t = document.createElement("span");
       t.className = "it-n"; t.textContent = top; b.appendChild(t);
       if (sub) { const s = document.createElement("span"); s.className = "it-m"; s.textContent = sub; b.appendChild(s); }
-      b.title = title;
+      b.title = ttl;
       iters.appendChild(b);
       return b;
     }
     function renderIters() {
+      const hist = C.hist;
       iters.textContent = "";
       if (hist[0].i > 1) {
         const m = document.createElement("span");
@@ -673,53 +759,136 @@
         iters.appendChild(m);
       }
       for (const x of hist) {
-        const title = [`Версія ${x.i}`, `раунд ${x.r}`, WHAT[x.kind], x.a ? "критики прийняли" : "", x.b ? "не пройшла лінт, критики не дивились" : "",
-                       x.cur ? "це поточна версія" : ""].filter(Boolean).join(" · ");
-        const b = chip(ICON[x.kind] + x.i + (x.a ? " ✓" : ""), subline(x), title, x === it || (!it && x.cur),
+        const ttl = [`Версія ${x.i}`, `раунд ${x.r}`, WHAT[x.kind], x.a ? "критики прийняли" : "", x.b ? "не пройшла лінт, критики не дивились" : "",
+                     x.cur ? "це поточна версія" : ""].filter(Boolean).join(" · ");
+        const b = chip(ICON[x.kind] + x.i + (x.a ? " ✓" : ""), subline(x), ttl, x === C.it || (!C.it && x.cur),
                        x.cur ? " same" : "");
         b.dataset.it = String(x.i);
         b.addEventListener("click", () => showIter(x));
       }
       const c = hist.find((x) => x.cur);
-      const b = chip("зараз", c ? subline(c) : "", "Поточна версія: нотатки йдуть до неї", !it, " now");
+      const b = chip("зараз", c ? subline(c) : "", "Поточна версія: нотатки йдуть до неї", !C.it, " now");
       b.dataset.it = "now";
       b.addEventListener("click", () => showIter(null));
     }
-    if (hist.length) {
-      iters.hidden = false;
-      renderIters();
-      iters.scrollLeft = iters.scrollWidth;              // the newest versions in view
+
+    // -- mounting a slide (once in link mode; on every thumbnail tap in deck mode) -----------------------------
+    function mount(P) {
+      for (const h of Array.from(pvbox.querySelectorAll(".pvhost"))) h.remove();
+      $("pv").hidden = true; $("nopv").hidden = true; $("tools").hidden = false;
+      pvbox.classList.remove("old"); badge.hidden = true;
+      note.disabled = false; note.placeholder = "Що покращити?";
+      const S = buildSlide(P);
+      if (!S) $("nopv").hidden = false;
+      C = { P, S, notes: all[P.sid] || (all[P.sid] = {}), sel: "slide", it: null, hist: (S && P.pv.hist) || [] };
+      V.z = 1; V.tx = 0; V.ty = 0;
+      view(false);
+      iters.textContent = "";
+      iters.hidden = !C.hist.length;
+      if (C.hist.length) { renderIters(); iters.scrollLeft = iters.scrollWidth; }
+      $("head").textContent = `Слайд ${P.n}` + (title ? ` · ${title}` : "");
+      select("slide");
+    }
+
+    // -- the deck: a strip of thumbnails; a tap opens the slide view, «← слайди» comes back ----------------
+    const thumbs = {};                                   // sid → its badge element
+    function deckView() {
+      $("slideview").hidden = true; $("back").hidden = true; $("deckview").hidden = false;
+      $("head").textContent = title ? `Слайди · ${title}` : "Слайди";
+      if (C && C.S) C.S.box.classList.remove("old");
+      renderBadges();
+      const t = C && $("deckview").querySelector(`.thumb[data-sid="${C.P.sid}"]`);
+      if (t) t.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    function slideView(P) {
+      $("deckview").hidden = true; $("slideview").hidden = false; $("back").hidden = false;
+      mount(P);
+      window.scrollTo(0, 0);
+    }
+    function renderBadges() {
+      for (const P of deck.slides) {
+        const n = Object.values(all[P.sid] || {}).filter((x) => clean(x.raw)).length;
+        thumbs[P.sid].hidden = !n;
+        thumbs[P.sid].textContent = String(n);
+        thumbs[P.sid].parentNode.classList.toggle("cur", !!(C && C.P === P));
+      }
+    }
+    if (deck) {
+      const strip = $("strip");
+      for (const P of deck.slides) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "thumb"; b.dataset.sid = P.sid;
+        b.title = `Слайд ${P.n}`;
+        const tbox = document.createElement("div");
+        tbox.className = "tbox";
+        const num = document.createElement("span");
+        num.className = "tnum"; num.textContent = String(P.n);
+        const bd = document.createElement("span");
+        bd.className = "tbadge"; bd.hidden = true;
+        b.append(tbox, num, bd);
+        strip.appendChild(b);
+        buildThumb(P, tbox, 148);
+        thumbs[P.sid] = bd;
+        b.addEventListener("click", () => slideView(P));
+      }
+      $("back").addEventListener("click", deckView);
+      $("bytes").hidden = false;
+    } else {
+      mount(M.one);
     }
 
     // -- notes ----------------------------------------------------------------------------------------
     note.addEventListener("input", () => {
+      if (!C) return;
       reopenSend();
       grow(note);
-      const had = !!notes[sel];
-      if (clean(note.value)) notes[sel] = { label: had ? notes[sel].label : labelFor(P, S, sel), raw: note.value };
+      const notes = C.notes, sel = C.sel, had = !!notes[sel];
+      if (clean(note.value)) notes[sel] = { label: had ? notes[sel].label : labelFor(C.P, C.S, sel), raw: note.value };
       else delete notes[sel];
       if (had !== !!notes[sel]) { overlays(); renderChips(); }
       update();
     });
 
-    // -- sending --------------------------------------------------------------------------------------
+    // -- the message: one §4 block (link mode), or one block per slide with notes joined by \n (deck mode) ------
+    function compose() {
+      if (!deck) {
+        const r = evaluate(C.P, C.notes);
+        return { msg: r.msg, ok: r.ok, reason: r.reason, n: r.items.length, bytes: utf8len(r.msg) };
+      }
+      const blocks = deck.slides.map((P) => ({ P, r: evaluate(P, all[P.sid] || {}) })).filter((b) => b.r.items.length);
+      const n = blocks.reduce((a, b) => a + b.r.items.length, 0);
+      const msg = blocks.map((b) => b.r.msg).join("\n"), bytes = utf8len(msg);
+      let reason = "";
+      if (!n) reason = "none";
+      else if (blocks.some((b) => b.r.items.some((x) => FENCE.test(x[2])))) reason = "Рядок нотатки не може починатися з ```";
+      else if (bytes > deck.maxBytes) {
+        const big = blocks.slice().sort((a, b) => utf8len(b.r.msg) - utf8len(a.r.msg)).map((b) => b.P.n);
+        reason = `Задовге повідомлення: ${bytes} із ${deck.maxBytes} байтів — скороти нотатки на ${big.length > 1 ? "слайдах" : "слайді"} ${big.join(", ")}`;
+      }
+      return { msg, ok: !reason, reason, n, bytes };
+    }
     function update() {
-      cur = evaluate(P, notes);
-      const n = cur.items.length;
+      cur = compose();
+      const n = cur.n;
       $("status").textContent = cur.ok || cur.reason === "none" ? "" : cur.reason;
       pre.textContent = cur.msg;
       copyBtn.disabled = !cur.ok;
+      if (deck) {
+        $("bytes").textContent = `${cur.bytes} / ${deck.maxBytes} байтів`;
+        $("bytes").classList.toggle("over", cur.bytes > deck.maxBytes);
+        renderBadges();
+      }
       if (tier === "web") {
         send.textContent = n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу";
         if (cur.ok) {
-          send.href = "https://t.me/" + P.bot + "?text=" + encodeURIComponent(cur.msg);
+          send.href = "https://t.me/" + bot + "?text=" + encodeURIComponent(cur.msg);
           send.removeAttribute("aria-disabled");
         } else {
           send.removeAttribute("href");
           send.setAttribute("aria-disabled", "true");
         }
       }
-      if (tier === "A") {
+      if (tier === "A" || tier === "K") {
         sendBtn.textContent = n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу";
         sendBtn.disabled = !cur.ok;
       }
@@ -729,15 +898,12 @@
       tg.openTelegramLink(url);
       setTimeout(() => tg.close(), 300);
     }
-    // tier A: an HTML button (a DOM gesture, so the clipboard works). Copy, then hand the text to the chat input,
-    // and stay open: closing right after openTelegramLink loses the prefill on Android. The notes stay.
-    function sendA() {
-      update();
-      if (!cur.ok) return;
-      const msg = cur.msg;
+    // copy, then hand the text to the chat input, and stay open: closing right after openTelegramLink loses the
+    // prefill on Android. The notes stay. (Tier A, and tier K when sendData is not available.)
+    function handOff(msg) {
       const copied = copy(msg);                         // starts inside the gesture
       try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
-      tg.openTelegramLink("https://t.me/" + P.bot + "?text=" + encodeURIComponent(msg));
+      tg.openTelegramLink("https://t.me/" + bot + "?text=" + encodeURIComponent(msg));
       $("bar").hidden = true; document.body.classList.remove("has-bar");
       $("donetext").textContent = "Текст скопійовано й передано в чат. Якщо поле вводу порожнє — затисни його → Вставити → ➤";
       $("done").hidden = false;
@@ -747,8 +913,27 @@
         pre.hidden = false;
       });
     }
+    function sendA() {
+      update();
+      if (cur.ok) handOff(cur.msg);
+    }
+    // tier K: a keyboard-button Mini App can send straight to the bot (sendData; Telegram then closes the app).
+    // Opened any other way (an inline button has a query_id) or if it throws: the copy + link fallback.
+    function sendK() {
+      update();
+      if (!cur.ok) return;
+      const keyboard = typeof tg.sendData === "function" && !(tg.initDataUnsafe && tg.initDataUnsafe.query_id);
+      if (keyboard) {
+        try {
+          try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
+          tg.sendData(cur.msg);
+          return;
+        } catch (e) { /* fall back */ }
+      }
+      handOff(cur.msg);
+    }
     function reopenSend() {                              // he edits again after sending: back to the button
-      if (tier !== "A" || $("done").hidden) return;
+      if ((tier !== "A" && tier !== "K") || $("done").hidden) return;
       $("done").hidden = true; pre.hidden = true;
       $("bar").hidden = false; document.body.classList.add("has-bar");
       try { tg.enableClosingConfirmation(); } catch (e) { /* old client */ }
@@ -764,14 +949,14 @@
         }
         if (!inTg) return toast("Скопійовано");
         toast("Скопійовано — вставте в чат і надішліть");
-        setTimeout(() => leave("https://t.me/" + P.bot), 900);
+        setTimeout(() => leave("https://t.me/" + bot), 900);
       });
     }
 
     copyBtn.addEventListener("click", copyAndOpen);
-    if (tier === "A") {
-      sendBtn.addEventListener("click", sendA);
-      $("again").addEventListener("click", () => tg.openTelegramLink("https://t.me/" + P.bot));
+    if (tier === "A" || tier === "K") {
+      sendBtn.addEventListener("click", tier === "K" ? sendK : sendA);
+      $("again").addEventListener("click", () => tg.openTelegramLink("https://t.me/" + bot));
       $("closeapp").addEventListener("click", () => tg.close());
       $("bar").hidden = false; document.body.classList.add("has-bar");
     } else if (tier === "B") {
@@ -781,9 +966,9 @@
     } else {                                              // outside Telegram: a plain link
       send.hidden = false;
     }
-    if (inTg && tg.MainButton) tg.MainButton.hide();      // our own button sends (tier A) or copies (B, C)
+    if (inTg && tg.MainButton) tg.MainButton.hide();      // our own button sends (A, K) or copies (B, C)
 
-    select("slide");
+    if (deck) deckView();
     update();
     if (tg) {
       try {
