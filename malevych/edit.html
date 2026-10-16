@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-YbDXc0PEm7Bn7lfIeiKX5QK9Af6LYHZHvkk0sxp5+xo=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wGFbe2rFZW+0nmdb58WfsJqOuDlQMDvLc1u/CPS2KGY=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -42,6 +42,7 @@
   .pvbox {
     position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; contain: layout paint;
     border-radius: 10px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
   .pvhost { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
   .tools { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 0; scrollbar-width: none; }
@@ -340,7 +341,7 @@
     return { x: (r.left - sr.left) / k, y: (r.top - sr.top) / k, w: r.width / k, h: r.height / k };
   }
 
-  // the zoom/ring box: an HTML element's actual contents (a full-width h1 → its text), an SVG element's own box
+  // the ring/pin box: an HTML element's actual contents (a full-width h1 → its text), an SVG element's own box
   function contentRect(S, el) {
     if (el.namespaceURI !== SVG_NS) {
       const rg = document.createRange();
@@ -400,23 +401,91 @@
     const notes = {};                                    // ref → {label, raw}
     let sel = "slide", cur = null;
 
-    // -- zoom + overlays ------------------------------------------------------------------------------
-    function zoom(animate) {
+    // -- view: the form's own image-viewer gestures (tap, double tap, pinch, pan); no zoom on selection -------
+    const V = { z: 1, tx: 0, ty: 0 };                  // zoom over fit (1…5), translate in box px
+    const ZMAX = 5, ZDBL = 2.5, SLOP = 8, DBL_MS = 280;
+    const fitK = () => S.box.clientWidth / S.W || 1;
+    function view(animate) {
       if (!S) return;
-      const bw = S.box.clientWidth, bh = S.box.clientHeight, s0 = bw / S.W || 1;
-      let k = s0, tx = 0, ty = 0;
-      const el = sel !== "slide" && S.els[sel];
-      if (el) {
-        const b = contentRect(S, el), m = 0.12;
-        k = Math.min(bw * (1 - 2 * m) / Math.max(b.w, 1), bh * (1 - 2 * m) / Math.max(b.h, 1), s0 * 4);
-        k = Math.max(k, s0);
-        tx = Math.min(0, Math.max(bw - k * S.W, bw / 2 - k * (b.x + b.w / 2)));
-        ty = Math.min(0, Math.max(bh - k * S.H, bh / 2 - k * (b.y + b.h / 2)));
-      }
+      const k0 = fitK();
+      V.z = Math.min(ZMAX, Math.max(1, V.z));
+      const k = k0 * V.z;
+      V.tx = Math.min(0, Math.max(S.box.clientWidth - k * S.W, V.tx));
+      V.ty = Math.min(0, Math.max(S.box.clientHeight - k * S.H, V.ty));
       S.k = k;
-      S.stage.style.transition = animate ? "transform .25s ease" : "none";
-      S.stage.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${k.toFixed(5)})`;
+      S.stage.style.transition = animate ? "transform .2s ease" : "none";
+      S.stage.style.transform = `translate(${V.tx.toFixed(2)}px, ${V.ty.toFixed(2)}px) scale(${k.toFixed(5)})`;
       overlays();
+    }
+    function fit(animate) { V.z = 1; V.tx = 0; V.ty = 0; view(animate); }
+    function zoomAround(x, y, z, animate) {            // keep the slide point under (x, y) there… or centre it
+      const k0 = fitK() * V.z, cx = (x - V.tx) / k0, cy = (y - V.ty) / k0;
+      V.z = Math.min(ZMAX, Math.max(1, z));
+      const k = fitK() * V.z;
+      V.tx = S.box.clientWidth / 2 - cx * k; V.ty = S.box.clientHeight / 2 - cy * k;
+      view(animate);
+    }
+    function gestures() {
+      const box = S.box, pts = new Map();
+      let g = null, lastTap = null;
+      const local = (e) => { const r = box.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+      function startPinch() {
+        const [a, b] = Array.from(pts.values());
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, k0 = fitK() * V.z;
+        g = { mode: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: V.z,
+              c: { x: (m.x - V.tx) / k0, y: (m.y - V.ty) / k0 } };
+      }
+      box.addEventListener("pointerdown", (e) => {
+        try { box.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+        const p = local(e);
+        pts.set(e.pointerId, p);
+        if (pts.size === 1) g = { mode: "tap", sx: p.x, sy: p.y, tx0: V.tx, ty0: V.ty, target: e.composedPath()[0] };
+        else if (pts.size === 2) startPinch();
+      });
+      box.addEventListener("pointermove", (e) => {
+        if (!pts.has(e.pointerId) || !g) return;
+        const p = local(e);
+        pts.set(e.pointerId, p);
+        if (g.mode === "pinch" && pts.size >= 2) {
+          const [a, b] = Array.from(pts.values());
+          const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          V.z = Math.min(ZMAX, Math.max(1, g.z0 * Math.hypot(a.x - b.x, a.y - b.y) / g.d0));
+          const k = fitK() * V.z;
+          V.tx = m.x - g.c.x * k; V.ty = m.y - g.c.y * k;
+          view(false);
+        } else if (pts.size === 1) {
+          const dx = p.x - g.sx, dy = p.y - g.sy;
+          if (g.mode === "tap" && Math.hypot(dx, dy) > SLOP) g.mode = "pan";
+          if (g.mode === "pan" && V.z > 1) { V.tx = g.tx0 + dx; V.ty = g.ty0 + dy; view(false); }
+        }
+      });
+      function end(e) {
+        if (!pts.has(e.pointerId)) return;
+        pts.delete(e.pointerId);
+        if (!g) return;
+        if (g.mode === "pinch") {                         // a finger left: the other one pans on from here
+          if (pts.size === 1) { const r = Array.from(pts.values())[0]; g = { mode: "pan", sx: r.x, sy: r.y, tx0: V.tx, ty0: V.ty }; }
+          else if (!pts.size) g = null;
+          return;
+        }
+        if (!pts.size) {
+          if (g.mode === "tap" && e.type === "pointerup") tap(g);
+          g = null;
+        }
+      }
+      box.addEventListener("pointerup", end);
+      box.addEventListener("pointercancel", end);
+      function tap(t) {
+        const now = performance.now();
+        const dbl = lastTap && now - lastTap.t < DBL_MS && Math.hypot(t.sx - lastTap.x, t.sy - lastTap.y) < 30;
+        lastTap = dbl ? null : { t: now, x: t.sx, y: t.sy };
+        if (dbl) {                                        // the first tap already selected: only the zoom changes
+          if (V.z > 1.01) fit(true); else zoomAround(t.sx, t.sy, ZDBL, true);
+          return;
+        }
+        const el = t.target instanceof Element ? t.target.closest("[data-e]") : null;
+        select(el && el !== S.sec && S.sec.contains(el) ? "e" + el.getAttribute("data-e") : "slide");
+      }
     }
     function overlays() {
       if (!S) return;
@@ -445,7 +514,7 @@
     const elementRefs = () => Object.keys(notes).filter((r) => r !== "slide").sort((a, b) => refOrder(a) - refOrder(b));
 
     // -- selection ------------------------------------------------------------------------------------
-    function select(ref) {
+    function select(ref, reset) {
       if (S && sel !== "slide" && S.els[sel]) S.els[sel].removeAttribute("data-mf-sel");
       sel = S && S.els[ref] ? ref : "slide";
       if (S && sel !== "slide") S.els[sel].setAttribute("data-mf-sel", "");
@@ -453,7 +522,7 @@
       note.value = notes[sel] ? notes[sel].raw : "";
       grow(note);
       wider.disabled = sel === "slide";
-      zoom(true);
+      if (reset && S) fit(true); else overlays();
       renderChips();
     }
     function parentRef() {
@@ -467,20 +536,18 @@
         const b = document.createElement("button");
         b.type = "button"; b.className = "chip" + (ref === sel ? " on" : ""); b.textContent = text;
         b.dataset.ref = ref; if (title) b.title = title;
-        b.addEventListener("click", () => select(ref));
+        b.addEventListener("click", () => select(ref, ref === "slide"));   // «Весь слайд» also fits
         chips.appendChild(b);
       };
       elementRefs().forEach((r, i) => mk(String(i + 1), r, notes[r].label));
       mk(notes.slide ? "Весь слайд ✎" : "Весь слайд", "slide");
     }
     if (S) {
-      S.root.addEventListener("click", (e) => {
-        const t = e.target instanceof Element ? e.target.closest("[data-e]") : null;
-        select(t && t !== S.sec && S.sec.contains(t) ? "e" + t.getAttribute("data-e") : "slide");
-      });
-      wider.addEventListener("click", () => select(parentRef()));
-      if (window.ResizeObserver) new ResizeObserver(() => zoom(false)).observe(S.box);
-      else window.addEventListener("resize", () => zoom(false));
+      gestures();
+      wider.addEventListener("click", () => select(parentRef()));      // never changes the zoom
+      if (window.ResizeObserver) new ResizeObserver(() => view(false)).observe(S.box);
+      else window.addEventListener("resize", () => view(false));
+      view(false);
     }
 
     // -- notes ----------------------------------------------------------------------------------------
@@ -560,6 +627,8 @@
       try {
         tg.ready(); tg.expand();
         if (inTg) tg.enableClosingConfirmation();
+        if (inTg && typeof tg.disableVerticalSwipes === "function"
+            && (typeof tg.isVersionAtLeast !== "function" || tg.isVersionAtLeast("7.7"))) tg.disableVerticalSwipes();
       } catch (e) { /* outside Telegram */ }
     }
   }
