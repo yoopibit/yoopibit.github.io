@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://telegram.org; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Mini App probe</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { --bg: var(--tg-theme-bg-color, #fff); --fg: var(--tg-theme-text-color, #111);
+          --hint: var(--tg-theme-hint-color, #888); --btn: var(--tg-theme-button-color, #2a7de1);
+          --btn-fg: var(--tg-theme-button-text-color, #fff); --sec: var(--tg-theme-secondary-bg-color, #f2f2f5); }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.4 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  .ok { color: #1a9e4b; font-weight: 600; } .bad { color: #d33; font-weight: 600; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; margin: 0 0 16px; }
+  dt { color: var(--hint); } dd { margin: 0; word-break: break-all; }
+  button { display: block; width: 100%; margin: 8px 0; padding: 12px; border: 0; border-radius: 10px;
+           background: var(--btn); color: var(--btn-fg); font-size: 16px; }
+  button.sec { background: var(--sec); color: var(--fg); }
+  pre { background: var(--sec); padding: 8px; border-radius: 8px; white-space: pre-wrap; word-break: break-word;
+        font-size: 12px; max-height: 40vh; overflow: auto; }
+  label { display: block; margin: 8px 0; color: var(--hint); }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: 24px; padding: 12px; border-radius: 10px;
+           background: #333; color: #fff; text-align: center; display: none; }
+</style>
+</head>
+<body>
+<h1>Перевірка Mini App (M1)</h1>
+<div id="verdict"></div>
+<dl id="info"></dl>
+<button id="a">A · вставити в чат Малевича (?text=)</button>
+<button id="b" class="sec">B · скопіювати й відкрити чат</button>
+<label><input type="checkbox" id="keep"> не закривати після кнопки</label>
+<label>Повідомлення (<span id="len"></span>):</label>
+<pre id="msg"></pre>
+<div id="toast"></div>
+<script>
+"use strict";
+const tg = (window.Telegram && Telegram.WebApp) || null;
+const BOT = "malevich_visual_bot";
+const $ = (id) => document.getElementById(id);
+const info = [];
+const row = (k, v) => info.push([k, String(v)]);
+
+function b64uToBytes(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+async function inflate(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return await new Response(stream).text();
+}
+async function decodeD(d) {
+  if (d[0] === "z") return JSON.parse(await inflate(b64uToBytes(d.slice(1))));
+  if (d[0] === "p") return JSON.parse(new TextDecoder().decode(b64uToBytes(d.slice(1))));
+  if (d[0] === "r") return { raw: d.length };          // T1 filler: random, not JSON
+  throw new Error("unknown prefix " + d[0]);
+}
+async function sha1hex(s) {
+  const b = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+const cps = (s) => [...s].length;
+
+// §4 message; h = sha1(NFC "key\nvalue\n"...)[:8]
+async function buildMessage(p, fields) {
+  const blob = fields.map(([k, , v]) => k + "\n" + v + "\n").join("").normalize("NFC");
+  const h = (await sha1hex(blob)).slice(0, 8);
+  const lines = [`✏️ Правки · ${p.pid} · ${p.sid} · v${p.ver} · ${p.fp} · h${h}`];
+  for (const [k, label, v] of fields) lines.push(`⟦${k} ${label}⟧`, v);
+  lines.push("⟦кінець⟧");
+  return lines.join("\n");
+}
+
+// T3/T4: a 3500-char Ukrainian message with every character class that could break on the way
+const SPECIAL = [
+  ["t1", "Заголовок", "Велосипед «замість» авто — пʼять хвилин, і ти вже там ’ 🚲✏️👍🏽"],
+  ["t2", "Текст 1", "@malevich_visual_bot рядок із собакою на початку\n**жирний** і __підкреслений__ і `код` і ⟦дужки⟧\n#хештег %20 + & = ? / <b>тег</b> &nbsp; \\ ~ | ^"],
+  ["t3", "Текст 2", "Їжак, ґанок, єнот, ї, й, ʼ (U+02BC) і ' (апостроф) і ’ (U+2019)\nдругий рядок\n\nпісля порожнього рядка"],
+];
+const FILL = "Місто, де можна доїхати куди завгодно за пʼятнадцять хвилин без машини, — це не мрія, а рішення. ";
+function longFields(target) {
+  const f = SPECIAL.map((x) => x.slice());
+  let i = 4;
+  const base = () => cps(["✏️ Правки · 00000000 · s1 · v1 · 00000000 · h00000000",
+                          ...f.flatMap(([k, l, v]) => [`⟦${k} ${l}⟧`, v]), "⟦кінець⟧"].join("\n"));
+  while (base() < target - 140) f.push([`t${i}`, `Текст ${i++ - 1}`, FILL.trim()]);
+  const last = f[f.length - 1];
+  while (base() < target) last[2] += "ʼ";
+  return f;
+}
+
+let msg = "";
+async function main() {
+  const rawHash = location.hash.slice(1);
+  const params = new URLSearchParams(rawHash);
+  row("href", location.href.length + " симв.");
+  row("hash", rawHash.length + " симв.; ключі: " + [...params.keys()].join(", "));
+  row("search", location.search || "—");
+  if (tg) {
+    row("WebApp", `v${tg.version}, ${tg.platform}, ${tg.colorScheme}`);
+    row("initData", tg.initData.length + " симв.");
+    const u = tg.initDataUnsafe || {};
+    row("chat_type", u.chat_type || "—");
+    row("chat_instance", u.chat_instance ? "є" : "—");
+    row("query_id", u.query_id ? "є" : "—");
+  } else row("WebApp", "не в Telegram");
+
+  const verdict = [];
+  const d = params.get("d"), k = params.get("k");
+  let payload = null;
+  if (!d) verdict.push('<span class="bad">d немає в hash</span>');
+  else {
+    row("d", d.length + " симв.");
+    const sum = (await sha1hex(d)).slice(0, 8);
+    if (k) verdict.push(sum === k ? `<span class="ok">T2 ✓ d ціле (${d.length} симв., ${sum})</span>`
+                                  : `<span class="bad">T2 ✗ d змінене: ${sum} ≠ ${k}</span>`);
+    try { payload = await decodeD(d); verdict.push(`<span class="ok">d розкодовано</span>`); }
+    catch (e) { verdict.push(`<span class="bad">d не розкодовується: ${e.message}</span>`); }
+  }
+  $("verdict").innerHTML = verdict.join("<br>");
+
+  const p = payload && payload.f ? payload : { pid: "00000000", sid: "s1", ver: 1, fp: "00000000" };
+  const fields = payload && payload.f ? payload.f.filter((x) => !x[3]) : longFields(3500);
+  msg = await buildMessage(p, fields);
+  $("msg").textContent = msg;
+  $("len").textContent = cps(msg) + " символів, UTF-16: " + msg.length;
+  $("info").innerHTML = info.map(([a, b]) => `<dt>${a}</dt><dd>${b.replace(/</g, "&lt;")}</dd>`).join("");
+  if (tg) { tg.ready(); tg.expand(); }
+}
+
+function toast(t) { const e = $("toast"); e.textContent = t; e.style.display = "block";
+                    setTimeout(() => (e.style.display = "none"), 2500); }
+function go(url) {
+  if (tg) {
+    tg.openTelegramLink(url);
+    if (!$("keep").checked) setTimeout(() => tg.close(), 300);
+  } else location.href = url;
+}
+$("a").onclick = () => go("https://t.me/" + BOT + "?text=" + encodeURIComponent(msg));
+$("b").onclick = async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText(msg); ok = true; } catch (e) {
+    const t = document.createElement("textarea"); t.value = msg; document.body.appendChild(t);
+    t.select(); ok = document.execCommand("copy"); t.remove();
+  }
+  toast(ok ? "Скопійовано — встав у чат і надішли" : "Не вдалося скопіювати");
+  if (ok) setTimeout(() => go("https://t.me/" + BOT), 900);
+};
+main().catch((e) => { $("verdict").innerHTML = `<span class="bad">помилка: ${e.message}</span>`; });
+</script>
+</body>
+</html>
