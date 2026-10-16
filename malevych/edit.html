@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wGFbe2rFZW+0nmdb58WfsJqOuDlQMDvLc1u/CPS2KGY=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-b+f46obnTUJ7KmvNT0OzDP1By8ADh52AlmBS1GhUg/E=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -82,6 +82,17 @@
     margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff;
     text-align: center; font-size: 15px; z-index: 10;
   }
+  body.has-bar { padding-bottom: calc(96px + max(env(safe-area-inset-bottom), var(--tg-safe-area-inset-bottom, 0px))); }
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--sec);
+    padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + max(env(safe-area-inset-bottom), var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px))) max(16px, env(safe-area-inset-left));
+    box-shadow: 0 -1px 0 rgba(0, 0, 0, .08);
+  }
+  .bar .btn { max-width: 640px; margin: 0 auto; min-height: 54px; }
+  .done { background: var(--field); border-radius: 12px; padding: 14px; margin: 0 0 10px; }
+  .done p { margin: 0 0 12px; font-size: 16px; }
+  .done .btn { margin: 0 0 8px; }
+  .done .btn.second { background: var(--sec); color: var(--link); }
   .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
 </style>
 </head>
@@ -102,9 +113,15 @@
   </div>
   <div id="status" role="status"></div>
   <a id="send" class="btn" hidden rel="noopener">Надіслати Малевичу</a>
+  <div id="done" class="done" hidden role="status">
+    <p id="donetext"></p>
+    <button id="again" class="btn second" type="button">Відкрити чат ще раз</button>
+    <button id="closeapp" class="btn second" type="button">Закрити</button>
+  </div>
   <button id="copy" class="btn" type="button" hidden>Скопіювати</button>
   <pre id="msg" hidden></pre>
 </main>
+<div id="bar" class="bar" hidden><button id="sendA" class="btn" type="button" disabled>Надіслати Малевичу</button></div>
 <div id="toast" hidden></div>
 <script>
 "use strict";
@@ -390,14 +407,13 @@
     if (!P) return fatal(BROKEN);
 
     const tier = inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web";
-    const MB = inTg && tier === "A" ? tg.MainButton : null;
     document.title = `Слайд ${P.n} · нотатки`;
     $("head").textContent = `Слайд ${P.n}` + (P.title ? ` · ${P.title}` : "");
 
     const S = buildSlide(P);
     if (!S) $("nopv").hidden = false;
     const note = $("note"), nlabel = $("nlabel"), wider = $("wider"), chips = $("chips");
-    const send = $("send"), copyBtn = $("copy"), pre = $("msg");
+    const send = $("send"), copyBtn = $("copy"), pre = $("msg"), sendBtn = $("sendA");
     const notes = {};                                    // ref → {label, raw}
     let sel = "slide", cur = null;
 
@@ -552,6 +568,7 @@
 
     // -- notes ----------------------------------------------------------------------------------------
     note.addEventListener("input", () => {
+      reopenSend();
       grow(note);
       const had = !!notes[sel];
       if (clean(note.value)) notes[sel] = { label: had ? notes[sel].label : labelFor(P, S, sel), raw: note.value };
@@ -577,11 +594,9 @@
           send.setAttribute("aria-disabled", "true");
         }
       }
-      if (MB) {
-        const tp = tg.themeParams || {};
-        MB.setParams({ text: n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу", is_visible: true, is_active: cur.ok,
-                       color: cur.ok ? (tp.button_color || "#2a7de1") : (tp.hint_color || "#8a8a8e"),
-                       text_color: tp.button_text_color || "#ffffff" });
+      if (tier === "A") {
+        sendBtn.textContent = n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу";
+        sendBtn.disabled = !cur.ok;
       }
     }
     function leave(url) {
@@ -589,10 +604,29 @@
       tg.openTelegramLink(url);
       setTimeout(() => tg.close(), 300);
     }
+    // tier A: an HTML button (a DOM gesture, so the clipboard works). Copy, then hand the text to the chat input,
+    // and stay open: closing right after openTelegramLink loses the prefill on Android. The notes stay.
     function sendA() {
       update();
       if (!cur.ok) return;
-      leave("https://t.me/" + P.bot + "?text=" + encodeURIComponent(cur.msg));
+      const msg = cur.msg;
+      const copied = copy(msg);                         // starts inside the gesture
+      try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
+      tg.openTelegramLink("https://t.me/" + P.bot + "?text=" + encodeURIComponent(msg));
+      $("bar").hidden = true; document.body.classList.remove("has-bar");
+      $("donetext").textContent = "Текст скопійовано й передано в чат. Якщо поле вводу порожнє — затисни його → Вставити → ➤";
+      $("done").hidden = false;
+      copied.then((ok) => {
+        if (ok) return;
+        $("donetext").textContent = "Текст передано в чат. Якщо поле вводу порожнє — скопіюй текст нижче, встав у чат і надішли.";
+        pre.hidden = false;
+      });
+    }
+    function reopenSend() {                              // he edits again after sending: back to the button
+      if (tier !== "A" || $("done").hidden) return;
+      $("done").hidden = true; pre.hidden = true;
+      $("bar").hidden = false; document.body.classList.add("has-bar");
+      try { tg.enableClosingConfirmation(); } catch (e) { /* old client */ }
     }
     function copyAndOpen() {
       update();
@@ -611,7 +645,10 @@
 
     copyBtn.addEventListener("click", copyAndOpen);
     if (tier === "A") {
-      MB.onClick(sendA);
+      sendBtn.addEventListener("click", sendA);
+      $("again").addEventListener("click", () => tg.openTelegramLink("https://t.me/" + P.bot));
+      $("closeapp").addEventListener("click", () => tg.close());
+      $("bar").hidden = false; document.body.classList.add("has-bar");
     } else if (tier === "B") {
       copyBtn.hidden = false; copyBtn.textContent = "Скопіювати й відкрити чат";
     } else if (tier === "C") {
@@ -619,7 +656,7 @@
     } else {                                              // outside Telegram: a plain link
       send.hidden = false;
     }
-    if (inTg && tier !== "A" && tg.MainButton) tg.MainButton.hide();
+    if (inTg && tg.MainButton) tg.MainButton.hide();      // our own button sends (tier A) or copies (B, C)
 
     select("slide");
     update();
