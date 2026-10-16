@@ -3,24 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KV0vkS24MpAE1YEOb4nbqLH5Ro/7btqlzeUyHRvbxf8=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-YbDXc0PEm7Bn7lfIeiKX5QK9Af6LYHZHvkk0sxp5+xo=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
-<title>Правки слайда</title>
+<title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
-    --bg: var(--tg-theme-bg-color, #fff); --fg: var(--tg-theme-text-color, #111);
+    --fg: var(--tg-theme-text-color, #111);
     --hint: var(--tg-theme-hint-color, #8a8a8e); --link: var(--tg-theme-link-color, #2a7de1);
     --btn: var(--tg-theme-button-color, #2a7de1); --btn-fg: var(--tg-theme-button-text-color, #fff);
     --sec: var(--tg-theme-secondary-bg-color, #f2f2f5); --field: var(--tg-theme-section-bg-color, #fff);
-    --bad: var(--tg-theme-destructive-text-color, #d93025); --warn: #c77700;
+    --bad: var(--tg-theme-destructive-text-color, #d93025);
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: var(--tg-theme-bg-color, #1c1c1e); --fg: var(--tg-theme-text-color, #f2f2f2);
-      --hint: var(--tg-theme-hint-color, #98989f); --sec: var(--tg-theme-secondary-bg-color, #000);
-      --field: var(--tg-theme-section-bg-color, #2c2c2e); --warn: #f0a640;
+      --fg: var(--tg-theme-text-color, #f2f2f2); --hint: var(--tg-theme-hint-color, #98989f);
+      --sec: var(--tg-theme-secondary-bg-color, #000); --field: var(--tg-theme-section-bg-color, #2c2c2e);
     }
   }
   * { box-sizing: border-box; }
@@ -34,50 +33,10 @@
              max(16px, env(safe-area-inset-left), var(--tg-safe-area-inset-left, 0px));
   }
   main { max-width: 640px; margin: 0 auto; }
-  h1 { font-size: 17px; font-weight: 600; margin: 0 0 2px; }
-  .sub { color: var(--hint); font-size: 14px; margin: 0 0 14px; overflow-wrap: anywhere; }
-  .field { background: var(--field); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
-  .field label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--hint); margin: 0 0 4px; }
-  .field textarea, .field input {
-    display: block; width: 100%; margin: 0; padding: 6px 0; border: 0; outline: 0; resize: none;
-    background: transparent; color: var(--fg); font: inherit; font-size: 17px; line-height: 1.35;
-    min-height: 44px; overflow: hidden;
-  }
-  .field:focus-within { box-shadow: 0 0 0 2px var(--btn); }
-  .field.changed label .k::after { content: " · змінено"; color: var(--link); }
-  .field.ro { opacity: .55; }
-  .field.ro:focus-within { box-shadow: none; }
-  .field .err { color: var(--bad); font-size: 13px; margin-top: 4px; }
-  .field .err:empty { display: none; }
-  .meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--hint); margin: 14px 2px 6px; }
-  .meta .over { color: var(--warn); font-weight: 600; }
-  .meta .block { color: var(--bad); font-weight: 600; }
-  #status { min-height: 20px; font-size: 14px; color: var(--hint); margin: 0 2px 10px; }
-  #status.bad { color: var(--bad); }
-  .btn {
-    display: block; width: 100%; min-height: 50px; margin: 0 0 10px; padding: 14px; border: 0; border-radius: 12px;
-    background: var(--btn); color: var(--btn-fg); font: inherit; font-size: 17px; font-weight: 600;
-    text-align: center; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .btn.second { background: var(--field); color: var(--link); }
-  .btn[disabled], .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 10px; overflow-wrap: anywhere; }
   [hidden] { display: none !important; }
-  details { margin: 6px 2px; }
-  summary { color: var(--hint); font-size: 14px; min-height: 32px; cursor: pointer; }
-  pre {
-    background: var(--field); padding: 10px 12px; border-radius: 12px; margin: 6px 0 0; font-size: 13px;
-    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text;
-  }
-  #toast {
-    position: fixed; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); max-width: 608px;
-    margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff;
-    text-align: center; font-size: 15px;
-  }
-  .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
-  .field { scroll-margin-top: calc(var(--pvh, 0px) + 10px); }
-  .field.hl { box-shadow: 0 0 0 2px var(--btn); }
   .pv {
-    position: sticky; z-index: 5; margin: 0 -16px 12px; padding: 4px 16px 6px; background: var(--sec);
+    position: sticky; z-index: 5; margin: 0 -16px 0; padding: 4px 16px 8px; background: var(--sec);
     top: calc(max(env(safe-area-inset-top), var(--tg-safe-area-inset-top, 0px)) + var(--tg-content-safe-area-inset-top, 0px));
   }
   .pvbox {
@@ -85,23 +44,65 @@
     border-radius: 10px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
   }
   .pvhost { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
-  .pvnote { font-size: 12px; color: var(--hint); margin: 5px 2px 0; }
+  .tools { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 0; scrollbar-width: none; }
+  .tools::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; min-width: 40px; min-height: 36px; padding: 6px 12px; border: 0; border-radius: 18px;
+    background: var(--field); color: var(--fg); font: inherit; font-size: 15px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .chip.on { background: var(--btn); color: var(--btn-fg); }
+  .chip[disabled] { opacity: .35; }
+  #wider { color: var(--link); }
+  #wider.on { color: var(--btn-fg); }
+  .nopv { color: var(--hint); font-size: 14px; margin: 0 2px 8px; }
+  .note { background: var(--field); border-radius: 12px; padding: 10px 12px; margin: 4px 0 10px; }
+  .note:focus-within { box-shadow: 0 0 0 2px var(--btn); }
+  .note label { display: block; font-size: 13px; color: var(--hint); margin: 0 0 4px; overflow-wrap: anywhere; }
+  .note textarea {
+    display: block; width: 100%; margin: 0; padding: 6px 0; border: 0; outline: 0; resize: none; overflow: hidden;
+    background: transparent; color: var(--fg); font: inherit; font-size: 17px; line-height: 1.35; min-height: 72px;
+  }
+  .note textarea::placeholder { color: var(--hint); }
+  #status { font-size: 14px; color: var(--bad); margin: 0 2px 10px; }
+  #status:empty { display: none; }
+  .btn {
+    display: block; width: 100%; min-height: 50px; margin: 0 0 10px; padding: 14px; border: 0; border-radius: 12px;
+    background: var(--btn); color: var(--btn-fg); font: inherit; font-size: 17px; font-weight: 600;
+    text-align: center; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .btn[disabled], .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+  pre {
+    background: var(--field); padding: 10px 12px; border-radius: 12px; margin: 0 0 10px; font-size: 13px;
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text;
+  }
+  #toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); max-width: 608px;
+    margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff;
+    text-align: center; font-size: 15px; z-index: 10;
+  }
+  .fatal { background: var(--field); border-radius: 12px; padding: 18px 16px; margin-top: 20vh; text-align: center; }
 </style>
 </head>
 <body>
 <main id="app">
   <h1 id="head"></h1>
-  <p class="sub" id="sub"></p>
   <div id="pv" class="pv" hidden>
     <div id="pvbox" class="pvbox"></div>
-    <p class="pvnote">Прев'ю приблизне — точний вигляд прийде від Малевича</p>
+    <div id="tools" class="tools">
+      <button id="wider" class="chip" type="button">⬆ ширше</button>
+      <span id="chips" style="display:contents"></span>
+    </div>
   </div>
-  <div id="fields"></div>
-  <div class="meta"><span id="words"></span><span id="chars"></span></div>
+  <p id="nopv" class="nopv" hidden>прев'ю недоступне</p>
+  <div class="note">
+    <label id="nlabel" for="note">Весь слайд</label>
+    <textarea id="note" rows="2" placeholder="Що покращити?" spellcheck="true" autocomplete="off"></textarea>
+  </div>
   <div id="status" role="status"></div>
   <a id="send" class="btn" hidden rel="noopener">Надіслати Малевичу</a>
-  <button id="copy" class="btn second" type="button" hidden>Скопіювати</button>
-  <details id="preview" hidden><summary>Що буде надіслано</summary><pre id="msg"></pre></details>
+  <button id="copy" class="btn" type="button" hidden>Скопіювати</button>
+  <pre id="msg" hidden></pre>
 </main>
 <div id="toast" hidden></div>
 <script>
@@ -117,7 +118,6 @@
   // Python str.strip() whitespace (str.isspace), so trimming matches miniapp.parse exactly
   const WS = "\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
   const TRIM = new RegExp("^[" + WS + "]+|[" + WS + "]+$", "g");
-  const WORD = /[\p{L}\p{N}]+(?:[-ʼ’'][\p{L}\p{N}]+)*/gu;   // lint.py: [^\W_]+(?:[-ʼ’'][^\W_]+)*
   const FENCE = /^```/m;                                       // miniapp.FENCE_RE drops such lines
 
   // -- decoding --------------------------------------------------------------------------------------
@@ -144,7 +144,7 @@
     if (!p || typeof p !== "object" || p.v !== 1) return null;
     if (typeof p.bot !== "string" || !/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(p.bot)) return null;
     if (!hex8(p.pid) || !hex8(p.fp) || typeof p.sid !== "string" || !/^s\d+$/.test(p.sid)) return null;
-    if (!isInt(p.ver) || !Array.isArray(p.f) || !p.f.length) return null;
+    if (!isInt(p.ver) || !Array.isArray(p.f)) return null;
     const seen = new Set();
     for (const x of p.f) {
       if (!Array.isArray(x) || x.length < 3 || x.length > 4) return null;
@@ -196,10 +196,9 @@
     return H.map((x) => x.toString(16).padStart(8, "0")).join("");
   }
 
-  // -- the §4 message (miniapp.build_message with_hash=True) ----------------------------------------
+  // -- the §4 message (miniapp.build_message with_hash=True), comment entries only -------------------
   const clean = (v) => v.replace(/\r\n?/g, "\n").replace(/[⟦⟧]/g, "").replace(TRIM, "");
   const cps = (s) => Array.from(s).length;
-  const countWords = (s) => (s.match(WORD) || []).length;
   function buildMessage(P, items) {
     const h = sha1hex(items.map(([k, , v]) => k + "\n" + v + "\n").join("").normalize("NFC")).slice(0, 8);
     const lines = [`✏️ Правки · ${P.pid} · ${P.sid} · v${P.ver} · ${P.fp} · h${h}`];
@@ -207,29 +206,21 @@
     lines.push(END);
     return lines.join("\n");
   }
-  // values: {key: raw value}. → {items, errors: {key: msg}, words, msg, chars, ok, reason}
-  function evaluate(P, values) {
-    const items = [], errors = {};
-    let words = P.wother;
-    for (const x of P.f) {
-      if (x.ro) continue;
-      const v = clean(values[x.key] !== undefined ? values[x.key] : x.text);
-      words += countWords(v);
-      if (!v) errors[x.key] = "Порожньо — щоб видалити текст, напиши в чаті";
-      else if (x.one && /\n/.test(v)) errors[x.key] = "Підпис у графіку має бути в один рядок";
-      else if (FENCE.test(v)) errors[x.key] = "Рядок не може починатися з ```";
-      if (v !== x.text) items.push([x.key, x.label, v]);
-    }
+  const refOrder = (r) => (r === "slide" ? Infinity : Number(r.slice(1)));
+  // notes: {ref: {label, raw}} → {items, msg, chars, ok, reason}
+  function evaluate(P, notes) {
+    const refs = Object.keys(notes).sort((a, b) => refOrder(a) - refOrder(b));
+    const items = refs.map((r) => ["c " + r, notes[r].label, clean(notes[r].raw)]).filter((x) => x[2]);
     const msg = items.length ? buildMessage(P, items) : "";
     const chars = cps(msg);
     let reason = "";
-    if (Object.keys(errors).length) reason = "Виправте поля, позначені червоним";
-    else if (!items.length) reason = "Змініть текст, щоб надіслати";
-    else if (chars > P.max) reason = `Задовге повідомлення: ${chars} із ${P.max} символів — скоротіть текст`;
-    return { items, errors, words, msg, chars, ok: !reason, reason };
+    if (!items.length) reason = "none";
+    else if (items.some((x) => FENCE.test(x[2]))) reason = "Рядок нотатки не може починатися з ```";
+    else if (chars > P.max) reason = `Задовге повідомлення: ${chars} із ${P.max} символів — скоротіть нотатки`;
+    return { items, msg, chars, ok: !reason, reason };
   }
 
-  // -- UI ----------------------------------------------------------------------------------------------
+  // -- UI helpers --------------------------------------------------------------------------------------
   function fatal(text) {
     const app = $("app");
     app.textContent = "";
@@ -246,7 +237,6 @@
     toastTimer = setTimeout(() => (e.hidden = true), ms || 2500);
   }
   function grow(el) {
-    if (el.tagName !== "TEXTAREA") return;
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   }
@@ -299,12 +289,19 @@
   const SHADOW_CSS = `
     .mf-stage { all: initial; display: block; position: relative; transform-origin: 0 0; overflow: hidden;
                 background: #fff; color: #000; color-scheme: light; font-family: "Noto Sans", sans-serif;
-                user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-    .mf-stage [data-mf] { cursor: pointer; }
-    .mf-stage > .mf-ring { position: absolute !important; pointer-events: none !important; box-sizing: border-box !important;
-                           border-style: solid !important; border-color: #2a8cff !important; z-index: 2147483647 !important;
-                           display: block !important; margin: 0 !important; background: none !important; }
-    .mf-stage > .mf-ring[hidden] { display: none !important; }`;
+                user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+                will-change: transform; }
+    .mf-stage > .mf-ring, .mf-stage > .mf-pin {
+      position: absolute !important; pointer-events: none !important; box-sizing: border-box !important;
+      z-index: 2147483647 !important; display: block !important; margin: 0 !important; padding: 0 !important; }
+    .mf-stage > .mf-ring { border-style: solid !important; border-color: #2a8cff !important; background: none !important; }
+    .mf-stage > .mf-pin { border-radius: 50% !important; background: #2a8cff !important; color: #fff !important;
+      text-align: center !important; font-family: -apple-system, system-ui, sans-serif !important; font-weight: 700 !important;
+      box-shadow: 0 0 0 1px #fff !important; }
+    .mf-stage > [hidden] { display: none !important; }
+    .mf-stage svg * { pointer-events: visible !important; }   /* unfilled shapes are tappable inside, too */`;
+
+  // the sanitised slide in a shadow root, scaled to the box; zoom = one transform on the stage
   function buildSlide(P) {
     if (!P.pv) return null;
     let sec = null;
@@ -312,7 +309,7 @@
     if (!sec) return null;
     const dim = (x, d) => { const n = parseInt(x, 10); return n >= 100 && n <= 10000 ? n : d; };
     const W = dim(sec.getAttribute("data-w"), 1920), H = dim(sec.getAttribute("data-h"), 1080);
-    const wrap = $("pv"), box = $("pvbox");
+    const box = $("pvbox");
     box.style.aspectRatio = W + " / " + H;
     const host = document.createElement("div");
     host.className = "pvhost";
@@ -329,51 +326,58 @@
     stage.append(sec, ring);
     root.append(style, stage);
     box.appendChild(host);
-    wrap.hidden = false;
-    const els = {}, orig = {};
-    for (const el of sec.querySelectorAll("[data-mf]")) {
-      const k = el.getAttribute("data-mf");
-      if (!els[k]) { els[k] = el; orig[k] = Array.from(el.childNodes, (c) => c.cloneNode(true)); }
+    $("pv").hidden = false;
+    const els = {};
+    for (const el of sec.querySelectorAll("[data-e]")) {
+      const n = el.getAttribute("data-e");
+      if (/^[1-9]\d{0,5}$/.test(n) && !els["e" + n]) els["e" + n] = el;
     }
-    const S = { root, stage, ring, els, scale: 1, active: null };
-    S.place = function () {
-      const el = S.active && els[S.active];
-      if (!el) { ring.hidden = true; return; }
-      const s = S.scale, sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
-      const pad = 3 / s, bw = 2 / s;
-      ring.style.left = (r.left - sr.left) / s - pad + "px";
-      ring.style.top = (r.top - sr.top) / s - pad + "px";
-      ring.style.width = r.width / s + 2 * pad + "px";
-      ring.style.height = Math.max(r.height / s, 8 / s) + 2 * pad + "px";
-      ring.style.borderWidth = bw + "px";
-      ring.style.borderRadius = 4 / s + "px";
-      ring.hidden = false;
-    };
-    S.fit = function () {
-      S.scale = box.clientWidth / W || 1;
-      stage.style.transform = `scale(${S.scale})`;
-      document.documentElement.style.setProperty("--pvh", wrap.offsetHeight + "px");
-      S.place();
-    };
-    // typing: text nodes (+ <br> in HTML fields) only, never parsed markup
-    S.paint = function (k, v, original) {
-      const el = els[k];
-      if (!el) return;
-      if (v === original) el.replaceChildren(...orig[k].map((c) => c.cloneNode(true)));
-      else if (el.namespaceURI === SVG_NS) el.replaceChildren(document.createTextNode(v.replace(/\n/g, " ")));
-      else {
-        el.replaceChildren();
-        v.split("\n").forEach((line, i) => {
-          if (i) el.appendChild(document.createElement("br"));
-          if (line) el.appendChild(document.createTextNode(line));
-        });
+    return { root, stage, sec, ring, els, W, H, box, k: 1, pins: [] };
+  }
+  // an element's box in stage pixels, whatever the current (even mid-animation) transform
+  function stageRect(S, el) {
+    const sr = S.stage.getBoundingClientRect(), r = el.getBoundingClientRect(), k = sr.width / S.W || 1;
+    return { x: (r.left - sr.left) / k, y: (r.top - sr.top) / k, w: r.width / k, h: r.height / k };
+  }
+
+  // the zoom/ring box: an HTML element's actual contents (a full-width h1 → its text), an SVG element's own box
+  function contentRect(S, el) {
+    if (el.namespaceURI !== SVG_NS) {
+      const rg = document.createRange();
+      rg.selectNodeContents(el);
+      const rs = Array.from(rg.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+      if (rs.length) {
+        const sr = S.stage.getBoundingClientRect(), k = sr.width / S.W || 1;
+        const l = Math.min(...rs.map((r) => r.left)), t = Math.min(...rs.map((r) => r.top));
+        const rr = Math.max(...rs.map((r) => r.right)), bb = Math.max(...rs.map((r) => r.bottom));
+        return { x: (l - sr.left) / k, y: (t - sr.top) / k, w: (rr - l) / k, h: (bb - t) / k };
       }
-      if (S.active === k) S.place();
-    };
-    if (window.ResizeObserver) new ResizeObserver(() => S.fit()).observe(box);
-    window.addEventListener("resize", () => S.fit());
-    S.fit();
-    return S;
+    }
+    return stageRect(S, el);
+  }
+
+  // labels: no ⟧, no newline, ≤ 40 code points
+  const TEXT_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "td", "th", "figcaption", "caption",
+    "span", "b", "strong", "em", "i", "u", "small", "mark", "sup", "sub", "a", "q", "blockquote", "label", "dt", "dd",
+    "text", "tspan", "textpath"]);
+  const SHAPES = new Set(["rect", "path", "line", "circle", "ellipse", "polygon", "polyline"]);
+  function textLabel(t) {
+    const s = Array.from(t.replace(/[⟦⟧]/g, "").replace(/\s+/g, " ").trim());
+    if (!s.length) return "";
+    return "Текст: «" + (s.length > 31 ? s.slice(0, 30).join("") + "…" : s.join("")) + "»";
+  }
+  function labelFor(P, S, ref) {
+    if (ref === "slide" || !S || !S.els[ref]) return "Весь слайд";
+    const el = S.els[ref], tag = el.localName.toLowerCase();
+    const mf = el.getAttribute("data-mf"), f = mf && P.f.find((x) => x.key === mf);
+    if (f && f.text) return textLabel(f.text) || "Елемент";
+    if (SHAPES.has(tag)) return "Фігура";
+    if (tag === "g") return "Група";
+    if (tag === "img" || tag === "image") return "Зображення";
+    if (tag === "svg") return "Діаграма";
+    const leaf = !el.firstElementChild || Array.from(el.children).every((c) => c.localName === "br");
+    if (mf || TEXT_TAGS.has(tag) || (tag === "div" && leaf)) return textLabel(el.textContent || "") || "Елемент";
+    return "Елемент";
   }
 
   async function main() {
@@ -383,102 +387,121 @@
       if (d) P = checkPayload(await decodeD(d));
     } catch (e) { P = null; }
     if (!P) return fatal(BROKEN);
-    if (!P.f.some((x) => !x.ro)) return fatal("На цьому слайді немає тексту, який можна правити з форми — напиши в чаті");
 
     const tier = inTg ? (P.tier === "A" || P.tier === "B" ? P.tier : "C") : "web";
     const MB = inTg && tier === "A" ? tg.MainButton : null;
-    document.title = `Слайд ${P.n} · правки`;
+    document.title = `Слайд ${P.n} · нотатки`;
     $("head").textContent = `Слайд ${P.n}` + (P.title ? ` · ${P.title}` : "");
-    $("sub").textContent = "Змініть текст і надішліть Малевичу. Числа, джерела й сірі поля — у чаті.";
 
-    const values = {}, boxes = {};
-    const wrap = $("fields");
-    for (const x of P.f) {
-      const box = document.createElement("div");
-      box.className = "field" + (x.ro ? " ro" : "");
-      const lab = document.createElement("label");
-      const k = document.createElement("span");
-      k.className = "k"; k.textContent = x.label;
-      lab.appendChild(k);
-      if (x.ro) { const s = document.createElement("span"); s.textContent = "змінити в чаті"; lab.appendChild(s); }
-      const el = document.createElement(x.one ? "input" : "textarea");
-      el.id = lab.htmlFor = "f-" + x.key;
-      el.dataset.key = x.key;
-      el.value = x.text;
-      el.spellcheck = true;
-      el.setAttribute("autocomplete", "off");
-      if (x.one) { el.type = "text"; el.enterKeyHint = "done"; } else el.rows = 1;
-      if (x.ro) {
-        el.readOnly = true; el.tabIndex = -1; el.setAttribute("aria-readonly", "true");
-        if (!x.text) el.placeholder = "(не вмістилося в посилання)";
-      }
-      const err = document.createElement("div");
-      err.className = "err";
-      box.append(lab, el, err);
-      wrap.appendChild(box);
-      boxes[x.key] = { box, el, err };
-      if (!x.ro) {
-        values[x.key] = x.text;
-        el.addEventListener("input", () => {
-          values[x.key] = el.value; grow(el); update();
-          if (slide) slide.paint(x.key, clean(el.value), x.text);
-        });
-        if (x.one) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
-      }
-      el.addEventListener("focus", () => setActive(x.key));
-      el.addEventListener("blur", () => setTimeout(() => {
-        const a = document.activeElement;
-        if (!(a && a.dataset && a.dataset.key)) setActive(null);
-      }, 0));
-    }
+    const S = buildSlide(P);
+    if (!S) $("nopv").hidden = false;
+    const note = $("note"), nlabel = $("nlabel"), wider = $("wider"), chips = $("chips");
+    const send = $("send"), copyBtn = $("copy"), pre = $("msg");
+    const notes = {};                                    // ref → {label, raw}
+    let sel = "slide", cur = null;
 
-    const byKey = Object.fromEntries(P.f.map((x) => [x.key, x]));
-    const slide = buildSlide(P);
-    function setActive(k) {
-      if (slide && slide.active === k) return;
-      for (const key in boxes) boxes[key].box.classList.toggle("hl", key === k);
-      if (!slide) return;
-      if (slide.active && slide.els[slide.active]) slide.els[slide.active].removeAttribute("data-mf-hl");
-      slide.active = k;
-      if (k && slide.els[k]) slide.els[k].setAttribute("data-mf-hl", "");
-      slide.place();
+    // -- zoom + overlays ------------------------------------------------------------------------------
+    function zoom(animate) {
+      if (!S) return;
+      const bw = S.box.clientWidth, bh = S.box.clientHeight, s0 = bw / S.W || 1;
+      let k = s0, tx = 0, ty = 0;
+      const el = sel !== "slide" && S.els[sel];
+      if (el) {
+        const b = contentRect(S, el), m = 0.12;
+        k = Math.min(bw * (1 - 2 * m) / Math.max(b.w, 1), bh * (1 - 2 * m) / Math.max(b.h, 1), s0 * 4);
+        k = Math.max(k, s0);
+        tx = Math.min(0, Math.max(bw - k * S.W, bw / 2 - k * (b.x + b.w / 2)));
+        ty = Math.min(0, Math.max(bh - k * S.H, bh / 2 - k * (b.y + b.h / 2)));
+      }
+      S.k = k;
+      S.stage.style.transition = animate ? "transform .25s ease" : "none";
+      S.stage.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${k.toFixed(5)})`;
+      overlays();
     }
-    if (slide) {
-      slide.root.addEventListener("click", (e) => {
-        const t = e.target instanceof Element ? e.target.closest("[data-mf]") : null;
-        const x = t && byKey[t.getAttribute("data-mf")];
-        if (!x) return;
-        if (x.ro) { setActive(x.key); return toast("це змінюється в чаті", 1800); }
-        const b = boxes[x.key];
-        b.el.focus({ preventScroll: true });
-        b.box.scrollIntoView({ block: "start" });
-        setActive(x.key);
+    function overlays() {
+      if (!S) return;
+      const k = S.k, el = sel !== "slide" && S.els[sel];
+      if (el) {
+        const b = contentRect(S, el), pad = 3 / k;
+        Object.assign(S.ring.style, { left: b.x - pad + "px", top: b.y - pad + "px", width: b.w + 2 * pad + "px",
+                                      height: b.h + 2 * pad + "px", borderWidth: 2 / k + "px", borderRadius: 4 / k + "px" });
+      }
+      S.ring.hidden = !el;
+      for (const p of S.pins) p.remove();
+      S.pins = [];
+      elementRefs().forEach((r, i) => {
+        const e = S.els[r];
+        if (!e) return;
+        const b = contentRect(S, e), d = 18 / k;
+        const pin = document.createElement("div");
+        pin.className = "mf-pin"; pin.dataset.ref = r;
+        pin.textContent = String(i + 1);
+        Object.assign(pin.style, { left: b.x - d / 2 + "px", top: b.y - d / 2 + "px", width: d + "px", height: d + "px",
+                                   fontSize: 11 / k + "px", lineHeight: d + "px" });
+        S.stage.appendChild(pin);
+        S.pins.push(pin);
       });
     }
+    const elementRefs = () => Object.keys(notes).filter((r) => r !== "slide").sort((a, b) => refOrder(a) - refOrder(b));
 
-    const send = $("send"), copyBtn = $("copy"), preview = $("preview");
-    let cur = null;
+    // -- selection ------------------------------------------------------------------------------------
+    function select(ref) {
+      if (S && sel !== "slide" && S.els[sel]) S.els[sel].removeAttribute("data-mf-sel");
+      sel = S && S.els[ref] ? ref : "slide";
+      if (S && sel !== "slide") S.els[sel].setAttribute("data-mf-sel", "");
+      nlabel.textContent = notes[sel] ? notes[sel].label : labelFor(P, S, sel);
+      note.value = notes[sel] ? notes[sel].raw : "";
+      grow(note);
+      wider.disabled = sel === "slide";
+      zoom(true);
+      renderChips();
+    }
+    function parentRef() {
+      const el = S && sel !== "slide" && S.els[sel];
+      const up = el && el.parentElement && el.parentElement.closest("[data-e]");
+      return up && up !== S.sec && S.sec.contains(up) ? "e" + up.getAttribute("data-e") : "slide";
+    }
+    function renderChips() {
+      chips.textContent = "";
+      const mk = (text, ref, title) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "chip" + (ref === sel ? " on" : ""); b.textContent = text;
+        b.dataset.ref = ref; if (title) b.title = title;
+        b.addEventListener("click", () => select(ref));
+        chips.appendChild(b);
+      };
+      elementRefs().forEach((r, i) => mk(String(i + 1), r, notes[r].label));
+      mk(notes.slide ? "Весь слайд ✎" : "Весь слайд", "slide");
+    }
+    if (S) {
+      S.root.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target.closest("[data-e]") : null;
+        select(t && t !== S.sec && S.sec.contains(t) ? "e" + t.getAttribute("data-e") : "slide");
+      });
+      wider.addEventListener("click", () => select(parentRef()));
+      if (window.ResizeObserver) new ResizeObserver(() => zoom(false)).observe(S.box);
+      else window.addEventListener("resize", () => zoom(false));
+    }
+
+    // -- notes ----------------------------------------------------------------------------------------
+    note.addEventListener("input", () => {
+      grow(note);
+      const had = !!notes[sel];
+      if (clean(note.value)) notes[sel] = { label: had ? notes[sel].label : labelFor(P, S, sel), raw: note.value };
+      else delete notes[sel];
+      if (had !== !!notes[sel]) { overlays(); renderChips(); }
+      update();
+    });
+
+    // -- sending --------------------------------------------------------------------------------------
     function update() {
-      cur = evaluate(P, values);
-      for (const x of P.f) {
-        if (x.ro) continue;
-        const b = boxes[x.key];
-        b.err.textContent = cur.errors[x.key] || "";
-        b.box.classList.toggle("changed", cur.items.some((i) => i[0] === x.key));
-      }
-      const we = $("words");
-      we.textContent = `Слів на слайді: ${cur.words} / ${P.wmax}`;
-      we.className = cur.words > P.wmax ? "over" : "";
-      we.title = cur.words > P.wmax ? "Більше норми — Малевич перевірить, чи вміщується" : "";
-      const ce = $("chars");
-      ce.textContent = `Символів: ${cur.chars} / ${P.max}`;
-      ce.className = cur.chars > P.max ? "block" : "";
-      const st = $("status");
-      st.textContent = cur.ok ? `Змінено полів: ${cur.items.length}` : cur.reason;
-      st.className = cur.ok || !cur.items.length ? "" : "bad";
-      $("msg").textContent = cur.msg;
+      cur = evaluate(P, notes);
+      const n = cur.items.length;
+      $("status").textContent = cur.ok || cur.reason === "none" ? "" : cur.reason;
+      pre.textContent = cur.msg;
       copyBtn.disabled = !cur.ok;
       if (tier === "web") {
+        send.textContent = n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу";
         if (cur.ok) {
           send.href = "https://t.me/" + P.bot + "?text=" + encodeURIComponent(cur.msg);
           send.removeAttribute("aria-disabled");
@@ -489,12 +512,11 @@
       }
       if (MB) {
         const tp = tg.themeParams || {};
-        MB.setParams({ text: "Надіслати Малевичу", is_visible: true, is_active: cur.ok,
+        MB.setParams({ text: n ? `Надіслати Малевичу (${n})` : "Надіслати Малевичу", is_visible: true, is_active: cur.ok,
                        color: cur.ok ? (tp.button_color || "#2a7de1") : (tp.hint_color || "#8a8a8e"),
                        text_color: tp.button_text_color || "#ffffff" });
       }
     }
-
     function leave(url) {
       try { tg.disableClosingConfirmation(); } catch (e) { /* old client */ }
       tg.openTelegramLink(url);
@@ -510,7 +532,7 @@
       if (!cur.ok) return;
       copy(cur.msg).then((ok) => {
         if (!ok) {
-          preview.hidden = false; preview.open = true;
+          pre.hidden = false;
           toast("Не вдалося скопіювати — виділіть текст нижче й скопіюйте вручну", 4000);
           return;
         }
@@ -520,33 +542,20 @@
       });
     }
 
-    copyBtn.hidden = false;
     copyBtn.addEventListener("click", copyAndOpen);
-    preview.hidden = false;
     if (tier === "A") {
-      copyBtn.textContent = "Скопіювати";
       MB.onClick(sendA);
     } else if (tier === "B") {
-      copyBtn.textContent = "Скопіювати й відкрити чат";
-      copyBtn.classList.remove("second");
+      copyBtn.hidden = false; copyBtn.textContent = "Скопіювати й відкрити чат";
     } else if (tier === "C") {
-      copyBtn.textContent = "Скопіювати";
-      copyBtn.classList.remove("second");
-      preview.open = true;
+      copyBtn.hidden = false; pre.hidden = false;
     } else {                                              // outside Telegram: a plain link
       send.hidden = false;
-      copyBtn.textContent = "Скопіювати";
-      if (P.tier !== "A" && P.tier !== "B") preview.open = true;
     }
     if (inTg && tier !== "A" && tg.MainButton) tg.MainButton.hide();
 
+    select("slide");
     update();
-    for (const x of P.f) grow(boxes[x.key].el);
-    window.addEventListener("resize", () => { for (const x of P.f) grow(boxes[x.key].el); });
-    // test hook: the validation of arbitrary values (an <input> cannot hold a newline)
-    window.__malevychForm = Object.freeze({ evaluate: (v) => { const r = evaluate(P, Object.assign({}, values, v));
-                                                                 return { ok: r.ok, reason: r.reason, errors: r.errors,
-                                                                          msg: r.msg, words: r.words }; } });
     if (tg) {
       try {
         tg.ready(); tg.expand();
