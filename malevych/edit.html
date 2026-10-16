@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-b+f46obnTUJ7KmvNT0OzDP1By8ADh52AlmBS1GhUg/E=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-l8WmNq48Y610ffRBK029s5A+bFBtkABpdIGs41L5dzM=' https://telegram.org; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Нотатки до слайда</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -57,6 +57,22 @@
   #wider { color: var(--link); }
   #wider.on { color: var(--btn-fg); }
   .nopv { color: var(--hint); font-size: 14px; margin: 0 2px 8px; }
+  .iters { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 8px; scrollbar-width: none; align-items: stretch; }
+  .iters::-webkit-scrollbar { display: none; }
+  .chip.it {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 36px; min-height: 38px; padding: 3px 8px; border-radius: 12px; font-size: 14px; line-height: 1.2;
+  }
+  .chip.it.same:not(.on) { box-shadow: inset 0 0 0 1.5px var(--btn); }
+  .it-n { font-weight: 600; white-space: nowrap; }
+  .it-m { font-size: 10px; opacity: .75; white-space: nowrap; }
+  .iters .more { flex: none; align-self: center; color: var(--hint); padding: 0 2px; }
+  .itbadge {
+    position: absolute; right: 6px; bottom: 6px; z-index: 3; pointer-events: none; padding: 2px 7px;
+    border-radius: 7px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px;
+  }
+  .pvbox.old { box-shadow: 0 0 0 2px var(--hint); }
+  .note textarea:disabled { opacity: .7; }
   .note { background: var(--field); border-radius: 12px; padding: 10px 12px; margin: 4px 0 10px; }
   .note:focus-within { box-shadow: 0 0 0 2px var(--btn); }
   .note label { display: block; font-size: 13px; color: var(--hint); margin: 0 0 4px; overflow-wrap: anywhere; }
@@ -100,7 +116,8 @@
 <main id="app">
   <h1 id="head"></h1>
   <div id="pv" class="pv" hidden>
-    <div id="pvbox" class="pvbox"></div>
+    <div id="iters" class="iters" hidden aria-label="Версії слайда"></div>
+    <div id="pvbox" class="pvbox"><div id="itbadge" class="itbadge" hidden></div></div>
     <div id="tools" class="tools">
       <button id="wider" class="chip" type="button">⬆ ширше</button>
       <span id="chips" style="display:contents"></span>
@@ -158,6 +175,24 @@
   }
   const hex8 = (x) => typeof x === "string" && /^[0-9a-f]{8}$/.test(x);
   const isInt = (x) => Number.isInteger(x) && x >= 0;
+  // pv.hist: the slide's earlier versions (miniapp.hist_payload), oldest first; anything malformed → no history
+  const KINDS = { e: "edit", n: "notes", y: "chat" };
+  const isMean = (m) => Array.isArray(m) && m.length === 2 && typeof m[0] === "string" && /^[^\s⟦⟧]{1,3}$/.test(m[0])
+    && typeof m[1] === "number" && Number.isFinite(m[1]) && m[1] >= 0 && m[1] <= 10;
+  function checkHist(h) {
+    if (!Array.isArray(h) || h.length > 50) return [];
+    const out = [];
+    for (const x of h) {
+      if (!x || typeof x !== "object" || !isInt(x.i) || !isInt(x.r)) return [];
+      if (x.k !== undefined && !KINDS[x.k]) return [];
+      const m = x.m === undefined ? [] : x.m;
+      if (!Array.isArray(m) || !m.every(isMean)) return [];
+      const cur = x.c === 1;
+      if (!cur && typeof x.h !== "string") return [];
+      out.push({ i: x.i, r: x.r, kind: KINDS[x.k] || "loop", m, a: x.a === 1, b: x.b === 1, cur, h: cur ? null : x.h });
+    }
+    return out;
+  }
   function checkPayload(p) {
     if (!p || typeof p !== "object" || p.v !== 1) return null;
     if (typeof p.bot !== "string" || !/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(p.bot)) return null;
@@ -181,7 +216,7 @@
       max: isInt(p.max) && p.max > 0 ? p.max : 3500,
       tier: typeof p.tier === "string" ? p.tier : "",
       pv: p.pv && typeof p.pv === "object" && typeof p.pv.html === "string" && typeof p.pv.css === "string"
-        ? { html: p.pv.html, css: p.pv.css } : null,
+        ? { html: p.pv.html, css: p.pv.css, hist: checkHist(p.pv.hist) } : null,
       f: p.f.map(([key, label, text, flags]) => ({ key, label, text, ro: !!((flags || 0) & RO),
                                                    one: !!((flags || 0) & ONE_LINE) })),
     };
@@ -320,13 +355,22 @@
     .mf-stage svg * { pointer-events: visible !important; }   /* unfilled shapes are tappable inside, too */`;
 
   // the sanitised slide in a shadow root, scaled to the box; zoom = one transform on the stage
-  function buildSlide(P) {
-    if (!P.pv) return null;
+  // one version of the slide, sanitised and sized, ready to sit in the stage: {sec, W, H} or null
+  function makeSec(html) {
     let sec = null;
-    try { sec = sanitize(P.pv.html); } catch (e) { sec = null; }
+    try { sec = sanitize(html); } catch (e) { sec = null; }
     if (!sec) return null;
     const dim = (x, d) => { const n = parseInt(x, 10); return n >= 100 && n <= 10000 ? n : d; };
     const W = dim(sec.getAttribute("data-w"), 1920), H = dim(sec.getAttribute("data-h"), 1080);
+    sec = document.adoptNode(sec);
+    sec.style.width = W + "px"; sec.style.height = H + "px"; sec.style.margin = "0";
+    return { sec, W, H };
+  }
+  function buildSlide(P) {
+    if (!P.pv) return null;
+    const now = makeSec(P.pv.html);
+    if (!now) return null;
+    const { sec, W, H } = now;
     const box = $("pvbox");
     box.style.aspectRatio = W + " / " + H;
     const host = document.createElement("div");
@@ -337,8 +381,6 @@
     const stage = document.createElement("div");
     stage.className = "mf-stage";
     stage.style.width = W + "px"; stage.style.height = H + "px";
-    sec = document.adoptNode(sec);
-    sec.style.width = W + "px"; sec.style.height = H + "px"; sec.style.margin = "0";
     const ring = document.createElement("div");
     ring.className = "mf-ring"; ring.hidden = true;
     stage.append(sec, ring);
@@ -350,7 +392,15 @@
       const n = el.getAttribute("data-e");
       if (/^[1-9]\d{0,5}$/.test(n) && !els["e" + n]) els["e" + n] = el;
     }
-    return { root, stage, sec, ring, els, W, H, box, k: 1, pins: [] };
+    return { root, stage, sec, ring, els, W, H, box, k: 1, pins: [], now, shown: now };
+  }
+  // show another version in the same stage (S.sec stays the current slide: selection and notes belong to it)
+  function swapSec(S, v) {
+    if (v === S.shown) return;
+    S.shown.sec.replaceWith(v.sec);
+    S.shown = v; S.W = v.W; S.H = v.H;
+    S.stage.style.width = v.W + "px"; S.stage.style.height = v.H + "px";
+    S.box.style.aspectRatio = v.W + " / " + v.H;
   }
   // an element's box in stage pixels, whatever the current (even mid-animation) transform
   function stageRect(S, el) {
@@ -416,6 +466,7 @@
     const send = $("send"), copyBtn = $("copy"), pre = $("msg"), sendBtn = $("sendA");
     const notes = {};                                    // ref → {label, raw}
     let sel = "slide", cur = null;
+    let it = null;                                       // the earlier version on screen, or null: the current slide
 
     // -- view: the form's own image-viewer gestures (tap, double tap, pinch, pan); no zoom on selection -------
     const V = { z: 1, tx: 0, ty: 0 };                  // zoom over fit (1…5), translate in box px
@@ -499,13 +550,14 @@
           if (V.z > 1.01) fit(true); else zoomAround(t.sx, t.sy, ZDBL, true);
           return;
         }
+        if (it) return;                                   // an earlier version: look only, nothing to select
         const el = t.target instanceof Element ? t.target.closest("[data-e]") : null;
         select(el && el !== S.sec && S.sec.contains(el) ? "e" + el.getAttribute("data-e") : "slide");
       }
     }
     function overlays() {
       if (!S) return;
-      const k = S.k, el = sel !== "slide" && S.els[sel];
+      const k = S.k, el = !it && sel !== "slide" && S.els[sel];
       if (el) {
         const b = contentRect(S, el), pad = 3 / k;
         Object.assign(S.ring.style, { left: b.x - pad + "px", top: b.y - pad + "px", width: b.w + 2 * pad + "px",
@@ -514,6 +566,7 @@
       S.ring.hidden = !el;
       for (const p of S.pins) p.remove();
       S.pins = [];
+      if (it) return;                                     // the pins mark the current slide's elements
       elementRefs().forEach((r, i) => {
         const e = S.els[r];
         if (!e) return;
@@ -564,6 +617,78 @@
       if (window.ResizeObserver) new ResizeObserver(() => view(false)).observe(S.box);
       else window.addEventListener("resize", () => view(false));
       view(false);
+    }
+
+    // -- versions: «1 · 2 · ✏️ 3 · зараз»; an earlier one is shown read-only in the same box, zoom and pan kept ----
+    const hist = (S && P.pv.hist) || [];
+    const iters = $("iters"), badge = $("itbadge");
+    const ICON = { loop: "", edit: "✏️ ", notes: "📝 ", chat: "💬 " };
+    const WHAT = { loop: "", edit: "твоя правка з форми", notes: "переробка за твоїми нотатками",
+                   chat: "переробка за твоєю правкою в чаті" };
+    const means = (x) => x.m.map(([c, v]) => c + " " + v.toFixed(1)).join(" · ");
+    const subline = (x) => means(x) || (x.b ? "лінт ✗" : x.kind === "edit" ? "твоя правка" : "");
+    function showIter(x) {                               // x: a hist entry, or null for «зараз»
+      if (x && x.cur) x = null;                          // that version is the one on the slide now
+      if (x && !x.v) {
+        x.v = makeSec(x.h);
+        if (!x.v) { toast("Цю версію не вдалося показати"); return; }
+      }
+      const v = x ? x.v : S.now, keep = v.W === S.W && v.H === S.H;
+      swapSec(S, v);
+      it = x;
+      $("tools").hidden = !!x;
+      note.disabled = !!x;
+      badge.hidden = !x;
+      S.box.classList.toggle("old", !!x);
+      if (x) {
+        badge.textContent = `версія ${x.i} · лише перегляд`;
+        nlabel.textContent = `Версія ${x.i} — лише перегляд`;
+        note.value = "";
+        note.placeholder = "Нотатки — лише до поточної версії: натисни «зараз»";
+        grow(note);
+        if (keep) view(false); else fit(false);
+      } else {
+        note.placeholder = "Що покращити?";
+        if (!keep) fit(false);
+        select(sel);                                     // label, note text, ring and pins of the current slide
+      }
+      renderIters();
+    }
+    function chip(top, sub, title, on, extra) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "chip it" + (on ? " on" : "") + (extra || "");
+      const t = document.createElement("span");
+      t.className = "it-n"; t.textContent = top; b.appendChild(t);
+      if (sub) { const s = document.createElement("span"); s.className = "it-m"; s.textContent = sub; b.appendChild(s); }
+      b.title = title;
+      iters.appendChild(b);
+      return b;
+    }
+    function renderIters() {
+      iters.textContent = "";
+      if (hist[0].i > 1) {
+        const m = document.createElement("span");
+        m.className = "more"; m.textContent = "…";
+        m.title = `Ще ${hist[0].i - 1} старіших версій не вмістилися в посилання`;
+        iters.appendChild(m);
+      }
+      for (const x of hist) {
+        const title = [`Версія ${x.i}`, `раунд ${x.r}`, WHAT[x.kind], x.a ? "критики прийняли" : "", x.b ? "не пройшла лінт, критики не дивились" : "",
+                       x.cur ? "це поточна версія" : ""].filter(Boolean).join(" · ");
+        const b = chip(ICON[x.kind] + x.i + (x.a ? " ✓" : ""), subline(x), title, x === it || (!it && x.cur),
+                       x.cur ? " same" : "");
+        b.dataset.it = String(x.i);
+        b.addEventListener("click", () => showIter(x));
+      }
+      const c = hist.find((x) => x.cur);
+      const b = chip("зараз", c ? subline(c) : "", "Поточна версія: нотатки йдуть до неї", !it, " now");
+      b.dataset.it = "now";
+      b.addEventListener("click", () => showIter(null));
+    }
+    if (hist.length) {
+      iters.hidden = false;
+      renderIters();
+      iters.scrollLeft = iters.scrollWidth;              // the newest versions in view
     }
 
     // -- notes ----------------------------------------------------------------------------------------
